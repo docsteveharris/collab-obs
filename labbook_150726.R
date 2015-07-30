@@ -1,10 +1,11 @@
 # author: Steve Harris
-# date: 2015-07-13
+# date: 2015-07-26
 # subject: Working draft of data management for Perv and obs data
 
 # Readme
 # ======
 # Aim is to merge excel data
+# Version 2
 
 
 # Todo
@@ -13,8 +14,8 @@
 
 # Log
 # ===
-# 2015-07-13
-# - file created
+# 2015-07-26
+# - file duplicated from previous labook
 
 
 
@@ -40,12 +41,159 @@ xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_
 rdf.theatre1 <- readWorksheet(xlbook, sheet = 'Theatre Case times 2013-15 orig')
 str(rdf.theatre1)
 
-# FIXME: 2015-07-13 - [ ] out of memory issues
+# FIXME: 2015-07-13 - [ ] out of memory issues, manually import as CSV
 # xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.xlsx')
 # rdf.theatre2 <- readWorksheet(xlbook, sheet = 'Theatre case times 2009-13 orig')
-# str(rdf.theatre2)
-rm(xlbook)
+# rm(xlbook)
+rdf.theatre2 <- read.csv(
+        '/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.csv',
+        stringsAsFactors=FALSE)
+str(rdf.theatre2)
+
+
+
+# Convert to minimal data tables
+# ------------------------------
+require(data.table)
+
+names(rdf.anaes)
+adt <- data.table(rdf.anaes[c('forename', 'surname', 'MRN')])
+adt[,name.a := tolower(paste0(surname, ', ', forename))]
+adt[, 'id.a':=as.numeric(.I)]
+adt[, `:=`(forename=NULL, surname=NULL)]
+setcolorder(adt, c('id.a', 'MRN', 'name.a'))
+adt[(MRN=='')]
+adt[is.na(MRN)]
+setkey(adt, 'MRN')
+adt <- unique(adt)
+adt
+
+names(rdf.theatre1)
+bdt.1 <- data.table(rdf.theatre1[c('Patient.Name', 'Hospital.Number')])
+bdt.1[, theatre.record := '2013-15']
+setnames(bdt.1, 'Patient.Name', 'name.b')
+setnames(bdt.1, 'Hospital.Number', 'MRN')
+bdt.1
+
+names(rdf.theatre2)
+bdt.2 <- data.table(rdf.theatre2[c('PatName', 'ID.helper')])
+bdt.2[, theatre.record := '2009-13']
+setnames(bdt.2, 'PatName', 'name.b')
+setnames(bdt.2, 'ID.helper', 'MRN')
+bdt.2
+
+bdt <- rbind(bdt.2, bdt.1)
+bdt[, 'id.b':=as.numeric(.I)]
+bdt[, name.b := tolower(name.b)]
+setcolorder(bdt, c('id.b', 'MRN', 'name.b', 'theatre.record'))
+bdt[, MRN := ifelse(MRN=='',NA,MRN)]
+bdt[is.na(MRN)]
+# Work with unique
+setkey(bdt, 'MRN')
+bdt <- unique(bdt)
+str(bdt)
+
+# Save copy of data
 ls()
+save(adt, bdt, file='temp')
+
+# Now do exact merge
+# ------------------
+# First create a list of unique hospital numbers
+c <- unique(rbind(adt[,'MRN',with=FALSE],bdt[,'MRN',with=FALSE]))
+# Drop missing MRN, and create new ID
+c[,"exa.id":=.GRP,by='MRN']
+c <- c[!is.na(MRN)]
+str(c)
+
+# Now merge
+# - drop NAs to avoid cartesian join on this
+# - work with unique MRN only - later will need to add dates etc
+adt1 <- merge(adt[!is.na(MRN)],bdt[!is.na(MRN)],by='MRN',all.x=T)
+head(adt1,30)
+library(Hmisc)
+describe(adt1$id.b)
+adt2 <- adt1[is.na(id.b)]
+adt2
+
+bdt1 <- merge(bdt[!is.na(MRN)],adt[!is.na(MRN)],by='MRN',all.x=T)
+head(bdt1,30)
+describe(bdt1$id.a)
+bdt2 <- bdt1[is.na(id.a)]
+bdt2
+
+# Try RecordLinkage
+require(RecordLinkage)
+str(adt2)
+a <- adt2[,.(MRN, id=id.a, name=name.a)]
+str(bdt2)
+b <- bdt2[,.(MRN, id=id.b, name=name.b)]
+rpairs <- compare.linkage(a, b, exclude=c('id'))
+rpairs <- epiWeights(rpairs) # calculate weights
+str(rpairs)
+summary(rpairs$Wdata)
+tail(getPairs(rpairs, max.weight=Inf, min.weight=0.4)) # run after weights
+
+
+
+# Now adt2 and bd2 are the remaining unmatched
+sdm <- stringdistmatrix(adt2$name.a, bdt2$name.b, method='osa')
+sdm.orig <- sdm
+# Use ids as row / col names
+rownames(sdm) <- adt2$id.a
+colnames(sdm) <- bdt2$id.b
+
+# DEBUGGING: 2015-07-27 - [ ] problem with NA?
+x <- sdm[1:10,1:10]
+x[1,1] <- NA
+x
+max.col(-x, ties.method='first')
+# try using colRanks from matrixStats
+
+mid <- max.col(-sdm, ties.method='first')
+mid <- matrix(c(1:nrow(sdm),mid),ncol=2)
+bestdis <- sdm[mid]
+r <- data.table(as.numeric(rownames(sdm)), as.numeric(colnames(x)[mid[,2]]), bestdis )
+setnames(r, c('id.a', 'id.b', 'dist'))
+head(r,30)
+describe(r$id.a)
+describe(r$id.b)
+
+adt[is.na(exa.id)]
+adt
+bdt <- merge(bdt,c,by='MRN',all.x=T)
+bdt[is.na(exa.id)]
+bdt
+
+
+# Now do fuzzy on remaining unmatched
+# -----------------------------------
+adt2 <- adt[is.na(exa.id)]
+adt2
+bdt2 <- bdt[is.na(exa.id)]
+bdt2
+
+
+
+
+
+# Inspect the outcome - but r is temporary 
+r <- merge(adt,bdt,by=c('exa.id'),all.x=T, allow.cartesian=T)
+r[,dist:=stringdist(name.a,name.b)]
+require(Hmisc)
+describe(r$dist) # distance missing for 8000+
+
+adt
+bdt
+
+# End of re-write of code
+# -----------------------
+stop()
+
+
+
+
+
 
 # Now try a test join
 # test.a <- head(rdf.anaes[1:5])
