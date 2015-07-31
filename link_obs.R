@@ -65,8 +65,11 @@ tdt.a[, namelast  := iconv(namelast, 'WINDOWS-1252', 'UTF-8')] # convert windows
 tdt.a[, namelast  :=substr(tolower(namelast),1,10)]
 tdt.a[, namefirst := iconv(namefirst, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
 tdt.a[, namefirst :=substr(tolower(namefirst),1,10)]
+
+# CHANGED: 2015-07-31 - [ ] last initial only
 # Add an initials field (for blocking later)
-tdt.a[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.a]
+# tdt.a[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.a]
+tdt.a[, initials := substr(namelast,1,1), by=id.a]
 str(tdt.a)
 
 # Load theatre databases
@@ -118,8 +121,11 @@ str(tdt.t2)
 
 tdt.t <- rbind(tdt.t2, tdt.t1)
 tdt.t[, id.t := .I]
+
 # Initials for blocking
-tdt.t[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.t]
+# CHANGED: 2015-07-31 - [ ] last initial only
+# tdt.t[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.t]
+tdt.t[, initials := substr(namelast,1,1), by=id.t]
 
 # Start with exact merge based on hospital number
 # -----------------------------------------------
@@ -149,45 +155,45 @@ nrow(tdt.t.mrn)
 mdt.mrn <- merge(
         tdt.a.mrn[!is.na(MRN)],
         tdt.t.mrn[!is.na(MRN)],
-        by='MRN', all.x=TRUE)
+        by='MRN')
 mdt.mrn[,link:='mrn.exact']
-mdt.mrn[!is.na(id.t)]
-
-
-# Now remove these merges from the data to see what remains to be matched
-tdt.a <- merge(tdt.a, mdt.mrn[,.(id.a, id.t,link)], by='id.a', all.x=TRUE)
-tdt.t <- merge(tdt.t, mdt.mrn[,.(id.a, id.t,link)], by='id.t', all.x=TRUE)
-
-tdt.a[is.na(id.t)]
-tdt.t[is.na(id.a)]
-# DEBUGGING: 2015-07-31 - [ ] problem with some names not having both initials
-tdt.a[nchar(initials)<2]
-tdt.t[nchar(initials)<2]
+mdt.mrn <- mdt.mrn[,.(id.a, id.t, link)]
+str(mdt.mrn)
 
 # Record linkage step
 # -------------------
 require(RecordLinkage)
 
-tdt.a.names <- tdt.a[is.na(id.t)]
+# Now remove these merges from the data to see what remains to be matched
+tdt.a.names <- merge(tdt.a, mdt.mrn[,.(id.a, id.t,link)], by='id.a', all.x=TRUE)
+tdt.a.names <- tdt.a.names[is.na(id.t)]
+
 setkey(tdt.a.names, namelast, namefirst)
 tdt.a.names <- unique(tdt.a.names[,.(id.a,MRN,namelast,namefirst,initials,id.t=NA)])
-tail(tdt.a.names,20)
+str(tdt.a.names,20)
 
-tdt.t.names <- tdt.t[is.na(id.a)]
+tdt.t.names <- merge(tdt.t, mdt.mrn[,.(id.a, id.t,link)], by='id.t', all.x=TRUE)
+tdt.t.names <- tdt.t.names[is.na(id.a)]
 setkey(tdt.t.names, namelast, namefirst)
 tdt.t.names <- unique(tdt.t.names[,.(id.t,MRN,namelast,namefirst,initials,id.a=NA)])
 str(tdt.t.names)
 
 rpairs <- compare.linkage(tdt.a.names, tdt.t.names,
+    strcmp=TRUE, strcmpfun=jarowinkler,
     exclude=c('MRN','id.a', 'id.t'), blockfld=c(5))
 rpairs <- epiWeights(rpairs) # calculate weights
 str(rpairs)
 summary(rpairs)
 summary(rpairs$Wdata)
-head(getPairs(rpairs, max.weight=0.99, min.weight=0.4),20) # run after weights
+# NOTE: 2015-07-31 - [ ] these commands run really slowly, only for inspection
+head(getPairs(rpairs, max.weight=0.99, min.weight=0.95),20) # run after weights
+tail(getPairs(rpairs, max.weight=0.95, min.weight=0.9),20) # run after weights
+# head(getPairs(rpairs, max.weight=0.79, min.weight=0.7),20) # run after weights
+# head(getPairs(rpairs, max.weight=0.79, min.weight=0.7),20) # run after weights
+# head(getPairs(rpairs, max.weight=0.69, min.weight=0.6),20) # run after weights
 
 # Now classify
-rlink <- epiClassify(rpairs, 0.9, 0.6)
+rlink <- epiClassify(rpairs, 0.95, 0.9)
 lpairs <- rlink$pairs
 link.yes <- lpairs[rlink$prediction=='L',]
 link.poss <- lpairs[rlink$prediction=='P',]
@@ -202,45 +208,95 @@ mdt.names
 # TODO: 2015-07-31 - [ ] should do this by weight from match, just do in order for now
 setkey(mdt.names, id.a)
 mdt.names <- unique(mdt.names)
-mdt.mrn <- mdt.mrn[!is.na(id.a) & !is.na(id.t), .(id.a, id.t, link)]
+# str(mdt.mrn)
+# mdt.mrn <- mdt.mrn[!is.na(id.a) & !is.na(id.t), .(id.a, id.t, link)]
 
-mdt <- rbind(mdt.mrn, mdt.names)
+# Identify remaining unmatched records
+tdt.a.rev <- merge(tdt.a, rbind(mdt.mrn, mdt.names), by='id.a', all.x=TRUE)
+table(tdt.a.rev$link)
+tdt.a.rev <- tdt.a.rev[is.na(id.t), .(id.a, 
+    namelast, namefirst,
+    n4 = paste(nl4=substr(namelast,1,4), nf4=substr(namefirst,1,4)))]
+tdt.a.rev <- tdt.a.rev[!is.na(namelast) & !is.na(namefirst)]
+tdt.a.rev
+
+x <- rbind(mdt.mrn, mdt.names)
+setkey(x, id.t)
+x <- unique(x)
+tdt.t.rev <- merge(tdt.t, x , by='id.t', all.x=TRUE)
+table(tdt.t.rev$link)
+tdt.t.rev <- tdt.t.rev[is.na(id.a), .(id.t,
+    namelast, namefirst,
+    n4=paste(nl4=substr(namelast,1,4), nf4=substr(namefirst,1,4)))]
+tdt.t.rev <- tdt.t.rev[!is.na(namelast) & !is.na(namefirst)]
+tdt.t.rev
+
+# So now try stringdist matrix using qgram which seems to cope well with reversal
+# stringdist('steve harris', 'steve harris', method='lcs')
+# stringdist('steve harri', 'steve harris', method='qgram')
+# stringdist('steve harri', 'rebekah harris', method='qgram')
+# stringdist('rebekah harris','steve harri',  method='qgram')
+# stringdist('steve, harris', 'harris, steve', method='osa')
+# stringdist('steve, harris', 'harris, steve', method='lcs')
+# stringdist('steve, harris', 'harris, steve', method='qgram')
+
+sdm <- stringdistmatrix(tdt.a.rev$n4, tdt.t.rev$n4, method='qgram')
+sdm.orig <- sdm
+# Use ids as row / col names
+rownames(sdm) <- tdt.a.rev$id.a
+colnames(sdm) <- tdt.t.rev$id.t
+# DEBUGGING: 2015-07-27 - [ ] problem with NA?
+# And using colRanks does not help
+# Will need to drop NA matches - @done(2015-07-31): see above
+# x <- sdm[1:10,1:10]
+# x[1,1] <- NA
+# x
+# max.col(-x, ties.method='first')
+
+mid <- max.col(-sdm, ties.method='first')
+mid <- matrix(c(1:nrow(sdm),mid),ncol=2)
+bestdis <- sdm[mid]
+r <- data.table(as.numeric(rownames(sdm)), as.numeric(colnames(sdm)[mid[,2]]), bestdis )
+setnames(r, c('id.a', 'id.t', 'dist'))
+head(r,30)
+table(r$dist) # 730 'perfect' matches?
+str(r)
+mdt.rev <- r[dist<=0, .(id.a, id.t, link='reverse')]
+head(mdt.rev)
+
+# Now merge back into the original data
+# -------------------------------------
+mdt <- rbind(mdt.mrn, mdt.names, mdt.rev)
 str(mdt)
 str(tdt.a)
 tdt.a[,initials:=NULL]
-tdt.a[,id.t:=NULL]
-tdt.a[,link:=NULL]
-tdt.a <- merge( tdt.a, mdt, by='id.a', all.x=TRUE )
-str(tdt.a)
-str(tdt.t)
-tdt.a <- merge(tdt.a,tdt.t,by='id.t',
+tdt.a.result <- merge( tdt.a, mdt, by='id.a', all.x=TRUE )
+str(tdt.a.result)
+tdt.a.result <- merge(tdt.a.result,tdt.t,by='id.t',
     all.x=TRUE, suffixes=c('.a','.t'))
+str(tdt.a.result)
 
-tdt.a[,link.t:=NULL]
-setnames(tdt.a,'link.a','link')
-tdt.a[,id.a.t:=NULL]
-setnames(tdt.a,'id.a.a','id.a')
-
-str(tdt.a)
-head(tdt.a[link=='mrn.exact'])
-head(tdt.a[link=='name.yes'])
-head(tdt.a[link=='name.poss'],20)
+head(tdt.a.result[link=='mrn.exact'])
+head(tdt.a.result[link=='name.yes'])
+head(tdt.a.result[link=='name.poss'],20)
+head(tdt.a.result[link=='reverse'],20)
 
 # Now generate a summary match quality indicator
-require(stringdist)
-tdt.a[, pid.all.a := paste0(MRN.a,namelast.a,namefirst.a)]
-tdt.a[, pid.all.t := paste0(MRN.t,namelast.t,namefirst.t)]
-tdt.a[, pid.all.dist := stringdist(pid.all.a, pid.all.t, method='osa')]
-summary(tdt.a$pid.all.dist)
+tdt.a.result[, pid.all.a := paste0(MRN.a,namelast.a,namefirst.a)]
+tdt.a.result[, pid.all.t := paste0(MRN.t,namelast.t,namefirst.t)]
+tdt.a.result[, pid.all.dist := stringdist(pid.all.a, pid.all.t, method='osa')]
+summary(tdt.a.result$pid.all.dist)
 
 # Inspect with distance metrics
-head(tdt.a[link =='mrn.exact' & pid.all.dist!=0,
+head(tdt.a.result[link =='mrn.exact' & pid.all.dist!=0,
     .(id.a, id.t, MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)])
-head(tdt.a[link =='name.yes' & pid.all.dist!=0,
+head(tdt.a.result[link =='name.yes' & pid.all.dist!=0,
     .(id.a, id.t,  MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)])
-head(tdt.a[link =='name.poss' & pid.all.dist<5,
+head(tdt.a.result[link =='name.poss' & pid.all.dist<5,
+    .(id.a, id.t, MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)],20)
+head(tdt.a.result[link =='reverse',
     .(id.a, id.t, MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)],20)
 
 require(gmodels)
-str(tdt.a)
-with(tdt.a, CrossTable(link, missing.include=T))
+str(tdt.a.result)
+with(tdt.a.result, CrossTable(link, missing.include=T))
