@@ -21,14 +21,14 @@
 
 rm(list=ls())
 
-setwd('/Users/steve/aor/p-academic/collab-obs-uclh/src')
+setwd('/Users/steve/aor/academic/collab-obs-uclh/src')
 library(XLConnect)
 library(stringdist)
 
 # Load anaesthetic database
 # -------------------------
 
-xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-anaes.xlsx')
+xlbook <- loadWorkbook('/Users/steve/aor/academic/collab-obs-uclh/data/150701_obs-db-anaes.xlsx')
 rdf.anaes <- readWorksheet(xlbook, sheet = 'ANAESTHETIC DATABASE')
 dim(rdf.anaes)
 str(rdf.anaes)
@@ -37,16 +37,16 @@ str(rdf.anaes)
 # Load theatre databases
 # ----------------------
 
-xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-theatre13-15.xlsx')
+xlbook <- loadWorkbook('/Users/steve/aor/academic/collab-obs-uclh/data/150701_obs-db-theatre13-15.xlsx')
 rdf.theatre1 <- readWorksheet(xlbook, sheet = 'Theatre Case times 2013-15 orig')
 str(rdf.theatre1)
 
 # FIXME: 2015-07-13 - [ ] out of memory issues, manually import as CSV
-# xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.xlsx')
+# xlbook <- loadWorkbook('/Users/steve/aor/academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.xlsx')
 # rdf.theatre2 <- readWorksheet(xlbook, sheet = 'Theatre case times 2009-13 orig')
 # rm(xlbook)
 rdf.theatre2 <- read.csv(
-        '/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.csv',
+        '/Users/steve/aor/academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.csv',
         stringsAsFactors=FALSE)
 str(rdf.theatre2)
 
@@ -144,11 +144,17 @@ rownames(sdm) <- adt2$id.a
 colnames(sdm) <- bdt2$id.b
 
 # DEBUGGING: 2015-07-27 - [ ] problem with NA?
-x <- sdm[1:10,1:10]
-x[1,1] <- NA
-x
-max.col(-x, ties.method='first')
-# try using colRanks from matrixStats
+# And using colRanks does not help
+# Yes. Use colMaxs as below with na.rm=TRUE else returns NA
+# x <- sdm[1:10,1:10]
+# x[1,1] <- NA
+# x
+# max.col(-x, ties.method='first')
+# # # try using colMaxs from matrixStats
+# # require(matrixStats)
+# colMaxs(-x,na.rm=FALSE)
+# colRanks(-x, ties.method=c('max'))
+# colMaxs(-x,na.rm=TRUE)
 
 mid <- max.col(-sdm, ties.method='first')
 mid <- matrix(c(1:nrow(sdm),mid),ncol=2)

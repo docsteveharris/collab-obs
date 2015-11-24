@@ -20,14 +20,14 @@
 
 rm(list=ls())
 
-setwd('/Users/steve/aor/p-academic/collab-obs-uclh/src')
+setwd('/Users/steve/aor/academic/collab-obs-uclh/src')
 library(XLConnect)
 library(stringdist)
 
 # Load anaesthetic database
 # -------------------------
 
-xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-anaes.xlsx')
+xlbook <- loadWorkbook('/Users/steve/aor/academic/collab-obs-uclh/data/150701_obs-db-anaes.xlsx')
 rdf.anaes <- readWorksheet(xlbook, sheet = 'ANAESTHETIC DATABASE')
 dim(rdf.anaes)
 str(rdf.anaes)
@@ -36,12 +36,12 @@ str(rdf.anaes)
 # Load theatre databases
 # ----------------------
 
-xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-theatre13-15.xlsx')
+xlbook <- loadWorkbook('/Users/steve/aor/academic/collab-obs-uclh/data/150701_obs-db-theatre13-15.xlsx')
 rdf.theatre1 <- readWorksheet(xlbook, sheet = 'Theatre Case times 2013-15 orig')
 str(rdf.theatre1)
 
 # FIXME: 2015-07-13 - [ ] out of memory issues
-# xlbook <- loadWorkbook('/Users/steve/aor/p-academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.xlsx')
+# xlbook <- loadWorkbook('/Users/steve/aor/academic/collab-obs-uclh/data/150701_obs-db-theatre09-13.xlsx')
 # rdf.theatre2 <- readWorksheet(xlbook, sheet = 'Theatre case times 2009-13 orig')
 # str(rdf.theatre2)
 rm(xlbook)
