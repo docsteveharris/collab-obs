@@ -22,11 +22,13 @@
 # ===
 # 2015-07-30
 # - file created
-
+# 2015-11-24
+# - updated for new path
+# - rerun and rechecked
 
 
 rm(list=ls())
-PROJECT_PATH <- '/Users/steve/aor/p-academic/collab-obs-uclh/'
+PROJECT_PATH <- '/Users/steve/aor/academic/collab-obs-uclh/'
 setwd(paste0(PROJECT_PATH, 'src'))
 
 library(RecordLinkage)
@@ -34,8 +36,9 @@ library(stringdist)
 library(data.table)
 library(stringr)
 
-# Load anaesthetic database
-# -------------------------
+#  =============================
+#  = Load anaesthetic database =
+#  =============================
 rdf.a <- read.csv(
         paste0(PROJECT_PATH, 'data/150701_obs-db-anaes.csv'),
         strip.white=TRUE,
@@ -70,10 +73,12 @@ tdt.a[, namefirst :=substr(tolower(namefirst),1,10)]
 # Add an initials field (for blocking later)
 # tdt.a[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.a]
 tdt.a[, initials := substr(namelast,1,1), by=id.a]
+tdt.a[,][1:20]
 str(tdt.a)
 
-# Load theatre databases
-# ----------------------
+#  ==========================
+#  = Load theatre databases =
+#  ==========================
 rdf.t1 <- read.csv(
         paste0(PROJECT_PATH, 'data/150701_obs-db-theatre13-15.csv'),
         strip.white=TRUE,
@@ -142,7 +147,7 @@ nrow(tdt.a)
 nrow(tdt.t)
 
 # mdt <- merge(tdt.a[!is.na(MRN)],tdt.t[!is.na(MRN)],by='MRN',all.x=T)
-# NOTE: 2015-07-30 - [ ] this throws an error b/c there are duplicates
+# NOTE: 2015-07-30 - [ ] this throws an error b/c there are duplicates @discuss
 # - for now assume excel order is chronological and work with unique
 setkey(tdt.a, MRN)
 tdt.a.mrn <- unique(tdt.a)
@@ -167,15 +172,18 @@ require(RecordLinkage)
 # Now remove these merges from the data to see what remains to be matched
 tdt.a.names <- merge(tdt.a, mdt.mrn[,.(id.a, id.t,link)], by='id.a', all.x=TRUE)
 tdt.a.names <- tdt.a.names[is.na(id.t)]
+nrow(tdt.a.names)
 
 setkey(tdt.a.names, namelast, namefirst)
 tdt.a.names <- unique(tdt.a.names[,.(id.a,MRN,namelast,namefirst,initials,id.t=NA)])
-str(tdt.a.names,20)
+tdt.a.names[1:20]
+str(tdt.a.names)
 
 tdt.t.names <- merge(tdt.t, mdt.mrn[,.(id.a, id.t,link)], by='id.t', all.x=TRUE)
 tdt.t.names <- tdt.t.names[is.na(id.a)]
 setkey(tdt.t.names, namelast, namefirst)
 tdt.t.names <- unique(tdt.t.names[,.(id.t,MRN,namelast,namefirst,initials,id.a=NA)])
+tdt.t.names[1:20]
 str(tdt.t.names)
 
 rpairs <- compare.linkage(tdt.a.names, tdt.t.names,
@@ -208,6 +216,7 @@ mdt.names
 # TODO: 2015-07-31 - [ ] should do this by weight from match, just do in order for now
 setkey(mdt.names, id.a)
 mdt.names <- unique(mdt.names)
+mdt.names
 # str(mdt.mrn)
 # mdt.mrn <- mdt.mrn[!is.na(id.a) & !is.na(id.t), .(id.a, id.t, link)]
 
@@ -277,15 +286,28 @@ tdt.a.result <- merge(tdt.a.result,tdt.t,by='id.t',
 str(tdt.a.result)
 
 head(tdt.a.result[link=='mrn.exact'])
+nrow(tdt.a.result[link=='mrn.exact'])
+
 head(tdt.a.result[link=='name.yes'])
+nrow(tdt.a.result[link=='name.yes'])
+
 head(tdt.a.result[link=='name.poss'],20)
+nrow(tdt.a.result[link=='name.poss'])
+
 head(tdt.a.result[link=='reverse'],20)
+nrow(tdt.a.result[link=='reverse'])
 
 # Now generate a summary match quality indicator
 tdt.a.result[, pid.all.a := paste0(MRN.a,namelast.a,namefirst.a)]
 tdt.a.result[, pid.all.t := paste0(MRN.t,namelast.t,namefirst.t)]
 tdt.a.result[, pid.all.dist := stringdist(pid.all.a, pid.all.t, method='osa')]
 summary(tdt.a.result$pid.all.dist)
+
+# Cut and classify by distance
+require(Hmisc)
+nrow(tdt.a.result)
+tdt.a.result[, pid.all.dist.cat := cut2(pid.all.dist, c(0:3,5,10))]
+CrossTable(tdt.a.result$pid.all.dist.cat)
 
 # Inspect with distance metrics
 head(tdt.a.result[link =='mrn.exact' & pid.all.dist!=0,
