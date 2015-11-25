@@ -16,6 +16,13 @@
 # TODO: 2015-07-31 - [ ] try 'lcs' longest common substring method of
 # string dist for managing inverted names
 # TODO: 2015-07-31 - [ ] @Perv: what to do with duplicates
+# TODO: 2015-11-24 - [ ] new strategy where you merge without dropping duplicates
+# - rpt for mrn, lname, fname etc
+# - create a master table
+# - calculate the string dist including one which allows for lcs for inverted names
+# - now order by string dist and drop duplicates
+# - merge this back against original
+
 
 
 # Log
@@ -25,6 +32,8 @@
 # 2015-11-24
 # - updated for new path
 # - rerun and rechecked
+# 2015-11-25
+# - splitting primary and secondary anaesthetic techniques
 
 
 rm(list=ls())
@@ -56,6 +65,49 @@ str(rdf.a)
 # --------------------------------------------
 rdt.a <- data.table(rdf.a)
 rdt.a[, id.a := .I] # unique key based on excel row number
+# CHANGED: 2015-11-25 - [ ] now duplicate where there is a secondary procedure
+# then select theatre procedures for matching (i.e. drop mat req)
+setcolorder(rdt.a,c(25,1:24))
+names(rdt.a)
+
+rdt.a[1:20,c(1:11,12), with=F]
+rdt.a1 <- rdt.a[,c(1:11,12), with=F] # primary anaes
+# flag where a secondary procedure occurs
+rdt.a1[,procedure := 1]
+rdt.a1[,secondary := ifelse(secondary.procedure=="" | secondary.procedure=="N/A",F,T)]
+table(rdt.a1$secondary.procedure)
+table(rdt.a1$secondary)
+rdt.a1[,secondary.procedure:=NULL]
+str(rdt.a1)
+setnames(rdt.a1, 'primary.anaes.technique', 'anaesthetic')
+setnames(rdt.a1, 'primary.ansthetist', 'anaesthetist1') # deliberate copy of misspell
+setnames(rdt.a1, 'secondary.anaesthetist', 'anaesthetist2')
+str(rdt.a1)
+
+# extract second procs
+names(rdt.a)
+rdt.a[1:5,c(1:5,12:17), with=F]
+rdt.a2 <- rdt.a[1:5,c(1:5,12:17), with=F]
+rdt.a2[,procedure := 2]
+str(rdt.a2)
+setnames(rdt.a2, 'indication.1', 'indication')
+setnames(rdt.a2, 'secondary.procedure', 'anaesthetic')
+setnames(rdt.a2, 'main.anasthetist', 'anaesthetist1') # deliberate copy of misspell
+setnames(rdt.a2, 'secondary.anaesthetist.1', 'anaesthetist2')
+setnames(rdt.a2, 'compication', 'complication')
+setnames(rdt.a2, 'comments.1', 'comments')
+str(rdt.a2)
+
+rdt.a.original <- rdt.a
+rdt.a <- rbind(rdt.a1, rdt.a2, fill=TRUE)
+names(rdt.a)
+setcolorder(rdt.a,c(1,12,2:11,13:15))
+str(rdt.a2)
+
+rdt.a
+
+
+stop()
 
 tdt.a <- rdt.a[, .(id.a, MRN=MRN, namelast=surname, namefirst=forename)]
 # NOTE: 2015-07-31 - [ ] lots of reversed names
@@ -146,9 +198,15 @@ tdt.t[, namefirst:=ifelse(str_trim(namefirst)=='',NA,namefirst)]
 nrow(tdt.a)
 nrow(tdt.t)
 
+#  ==========================
+#  = START MERGE SEQUENTIAL =
+#  ==========================
 # mdt <- merge(tdt.a[!is.na(MRN)],tdt.t[!is.na(MRN)],by='MRN',all.x=T)
 # NOTE: 2015-07-30 - [ ] this throws an error b/c there are duplicates @discuss
 # - for now assume excel order is chronological and work with unique
+# INSPECT
+tdt.a[1:20]
+
 setkey(tdt.a, MRN)
 tdt.a.mrn <- unique(tdt.a)
 nrow(tdt.a.mrn)
