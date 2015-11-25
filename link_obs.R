@@ -44,6 +44,7 @@ library(RecordLinkage)
 library(stringdist)
 library(data.table)
 library(stringr)
+library(gmodels)
 
 #  =============================
 #  = Load anaesthetic database =
@@ -63,6 +64,7 @@ str(rdf.a)
 
 # Now standardise these (leaving date for now)
 # --------------------------------------------
+nrow(rdf.a)
 rdt.a <- data.table(rdf.a)
 rdt.a[, id.a := .I] # unique key based on excel row number
 # CHANGED: 2015-11-25 - [ ] now duplicate where there is a secondary procedure
@@ -82,12 +84,13 @@ str(rdt.a1)
 setnames(rdt.a1, 'primary.anaes.technique', 'anaesthetic')
 setnames(rdt.a1, 'primary.ansthetist', 'anaesthetist1') # deliberate copy of misspell
 setnames(rdt.a1, 'secondary.anaesthetist', 'anaesthetist2')
+table(rdt.a1$procedure)
 str(rdt.a1)
 
 # extract second procs
 names(rdt.a)
 rdt.a[1:5,c(1:5,12:17), with=F]
-rdt.a2 <- rdt.a[1:5,c(1:5,12:17), with=F]
+rdt.a2 <- rdt.a[,c(1:5,12:17), with=F]
 rdt.a2[,procedure := 2]
 str(rdt.a2)
 setnames(rdt.a2, 'indication.1', 'indication')
@@ -96,16 +99,36 @@ setnames(rdt.a2, 'main.anasthetist', 'anaesthetist1') # deliberate copy of missp
 setnames(rdt.a2, 'secondary.anaesthetist.1', 'anaesthetist2')
 setnames(rdt.a2, 'compication', 'complication')
 setnames(rdt.a2, 'comments.1', 'comments')
+# Now filter out missing
+rdt.a2 <- rdt.a2[anaesthetic!="" & anaesthetic!="N/A"]
+table(rdt.a2$procedure)
 str(rdt.a2)
 
 rdt.a.original <- rdt.a
 rdt.a <- rbind(rdt.a1, rdt.a2, fill=TRUE)
 names(rdt.a)
-setcolorder(rdt.a,c(1,12,2:11,13:15))
-str(rdt.a2)
+setcolorder(rdt.a,c(1,12,2:11,13:14))
+# TODO: 2015-11-25 - [ ] fix procedure, count seems wrong
+table(rdt.a$procedure)
+table(rdt.a$secondary)
+str(rdt.a)
 
-rdt.a
-
+# Now filter out those needing theatre
+rdt.a[,c(1:6,8),with=FALSE]
+table(rdt.a$indication)
+grep('mat',"Maternal request", perl=TRUE, ignore.case=FALSE)
+grep('mat.*? +req.*?',"Maternal request", perl=TRUE, ignore.case=TRUE)
+table(rdt.a$indication[in])
+# Use regexp to pick out maternal request, obstetric request and epidural
+rdt.a$labour.epidural <- ifelse(
+    gregexpr('m[a| ]t.*? +req.*?',rdt.a$indication, perl=TRUE, ignore.case=TRUE) >0 |
+    gregexpr('^epidural.*',rdt.a$indication, perl=TRUE, ignore.case=TRUE) >0 |
+    gregexpr('obs.*? +req.*?',rdt.a$indication, perl=TRUE, ignore.case=TRUE) > 0 
+    ,1,0 )
+with(rdt.a, CrossTable(indication, labour.epidural, 
+    prop.r=F, prop.t=T, prop.c=F, prop.chisq=F))
+rdt.a[,indication.theatre := ifelse(labour.epidural==0,T,F)]
+table(rdt.a$indication.theatre)
 
 stop()
 
