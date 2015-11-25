@@ -34,6 +34,8 @@
 # - rerun and rechecked
 # 2015-11-25
 # - splitting primary and secondary anaesthetic techniques
+# - linkage routines re-written
+# - theatre used as master list
 
 
 rm(list=ls())
@@ -271,8 +273,8 @@ tdt.t[, key_1 := paste(
 tdt.t[,.(MRN,date.match,key_1,namefirst,namelast)]
 
 # Anaesthetic list is longer therefore this becomes master
-nrow(tdt.a)
-nrow(tdt.t)
+str(tdt.a)
+str(tdt.t)
 
 #  ============================================
 #  = END OF DATA PREPARATION - START OF MERGE =
@@ -368,19 +370,30 @@ str(mdt.key_2)
 #  =======================================
 require(RecordLinkage)
 
-# setkey(tdt.a.names, namelast, namefirst)
-# tdt.a.names <- unique(tdt.a.names[,.(id.a,MRN,namelast,namefirst,initials,id.t=NA)])
-# tdt.a.names[1:20]
-# str(tdt.a.names)
+# Drop those merged above
+tdt.a.fuzzy <- merge(tdt.a.names, mdt.key_2[,.(id.a, id.t,link)], by='id.a', all.x=TRUE)
+tdt.a.fuzzy <- tdt.a.fuzzy[is.na(id.t)]
+tdt.a.fuzzy[, key_3 := paste(namefirst,namelast,date.match,MRN)]
+tdt.a.fuzzy <- tdt.a.fuzzy[,.(id.a,MRN,date.match,key_3,namefirst,namelast)]
+str(tdt.a.fuzzy)
 
-# setkey(tdt.t.names, namelast, namefirst)
-# tdt.t.names <- unique(tdt.t.names[,.(id.t,MRN,namelast,namefirst,initials,id.a=NA)])
-# tdt.t.names[1:20]
-# str(tdt.t.names)
+tdt.t.fuzzy <- merge(tdt.t.names, mdt.key_2[,.(id.a, id.t,link)], by='id.t', all.x=TRUE)
+tdt.t.fuzzy <- tdt.t.fuzzy[is.na(id.a)]
+tdt.t.fuzzy[, key_3 := paste(namefirst,namelast,date.match,MRN)]
+tdt.t.fuzzy <- tdt.t.fuzzy[,.(id.t,MRN,date.match,key_3,namefirst,namelast)]
+str(tdt.t.fuzzy)
 
-rpairs <- compare.linkage(tdt.a.names, tdt.t.names,
+str(tdt.t.fuzzy)
+str(tdt.a.fuzzy)
+
+rpairs <- compare.linkage(tdt.a.fuzzy, tdt.t.fuzzy,
     strcmp=TRUE, strcmpfun=jarowinkler,
-    exclude=c('MRN','id.a', 'id.t'), blockfld=c(5))
+    exclude=c(1,2,3,5,6)
+    # exclude=c('MRN','id.a', 'id.t', 'namefirst', 'namelast', 'date.match')
+    # , blockfld=c(3) # block on date
+    )
+# NOTE: 2015-11-25 - [ ] long way from default for error
+# rpairs <- epiWeights(rpairs, e=0) # calculate weights
 rpairs <- epiWeights(rpairs) # calculate weights
 str(rpairs)
 summary(rpairs)
@@ -388,129 +401,95 @@ summary(rpairs$Wdata)
 # NOTE: 2015-07-31 - [ ] these commands run really slowly, only for inspection
 head(getPairs(rpairs, max.weight=0.99, min.weight=0.95),20) # run after weights
 tail(getPairs(rpairs, max.weight=0.95, min.weight=0.9),20) # run after weights
-# head(getPairs(rpairs, max.weight=0.79, min.weight=0.7),20) # run after weights
+head(getPairs(rpairs, max.weight=0.89, min.weight=0.8),20) # run after weights
 # head(getPairs(rpairs, max.weight=0.79, min.weight=0.7),20) # run after weights
 # head(getPairs(rpairs, max.weight=0.69, min.weight=0.6),20) # run after weights
 
 # Now classify
-rlink <- epiClassify(rpairs, 0.95, 0.9)
+rlink <- epiClassify(rpairs, 0.95, 0.85)
 lpairs <- rlink$pairs
 link.yes <- lpairs[rlink$prediction=='L',]
 link.poss <- lpairs[rlink$prediction=='P',]
 
 # Now subset
-mdt.names.yes <- cbind(tdt.a.names[link.yes$id1,.(id.a)], tdt.t.names[link.yes$id2,.(id.t,link='name.yes')])
-mdt.names.poss <- cbind(tdt.a.names[link.poss$id1,.(id.a)], tdt.t.names[link.poss$id2,.(id.t,link='name.poss')])
-mdt.names <- rbind(mdt.names.yes, mdt.names.poss)
-mdt.names
+mdt.fuzzy.yes <- cbind(
+    tdt.a.fuzzy[link.yes$id1,.(id.a,key_3.a=key_3)],
+    tdt.t.fuzzy[link.yes$id2,.(id.t,key_3.t=key_3,link='fuzzy.yes')])
+mdt.fuzzy.poss <- cbind(
+    tdt.a.fuzzy[link.poss$id1,.(id.a,key_3.a=key_3)], 
+    tdt.t.fuzzy[link.poss$id2,.(id.t,key_3.t=key_3,link='fuzzy.poss')])
+mdt.fuzzy <- rbind(mdt.fuzzy.yes, mdt.fuzzy.poss)
 
-# Now remove duplicates
-# TODO: 2015-07-31 - [ ] should do this by weight from match, just do in order for now
-setkey(mdt.names, id.a)
-mdt.names <- unique(mdt.names)
-mdt.names
-# str(mdt.key_1)
-# mdt.key_1 <- mdt.key_1[!is.na(id.a) & !is.na(id.t), .(id.a, id.t, link)]
+# Now remove duplicates but first sort by string dist
+mdt.fuzzy[, key_3.dist := stringdist(key_3.a, key_3.t, method='jw')]
+setorder(mdt.fuzzy,id.a,key_3.dist)
+mdt.fuzzy
+setkey(mdt.fuzzy, id.a)
+mdt.fuzzy <- unique(mdt.fuzzy)
+mdt.fuzzy
+setorder(mdt.fuzzy,key_3.dist)
+mdt.fuzzy
+mdt.key_3 <- mdt.fuzzy
 
-# Identify remaining unmatched records
-tdt.a.rev <- merge(tdt.a, rbind(mdt.key_1, mdt.names), by='id.a', all.x=TRUE)
-table(tdt.a.rev$link)
-tdt.a.rev <- tdt.a.rev[is.na(id.t), .(id.a, 
-    namelast, namefirst,
-    n4 = paste(nl4=substr(namelast,1,4), nf4=substr(namefirst,1,4)))]
-tdt.a.rev <- tdt.a.rev[!is.na(namelast) & !is.na(namefirst)]
-tdt.a.rev
+#  ===============================================
+#  = Put together the three record linkage steps =
+#  ===============================================
+str(mdt.key_1[,.(id.a,id.t,link)])
+str(mdt.key_2[,.(id.a,id.t,link)])
+str(mdt.key_3[,.(id.a,id.t,link)])
 
-x <- rbind(mdt.key_1, mdt.names)
-setkey(x, id.t)
-x <- unique(x)
-tdt.t.rev <- merge(tdt.t, x , by='id.t', all.x=TRUE)
-table(tdt.t.rev$link)
-tdt.t.rev <- tdt.t.rev[is.na(id.a), .(id.t,
-    namelast, namefirst,
-    n4=paste(nl4=substr(namelast,1,4), nf4=substr(namefirst,1,4)))]
-tdt.t.rev <- tdt.t.rev[!is.na(namelast) & !is.na(namefirst)]
-tdt.t.rev
+mdt.key <- rbind(
+    mdt.key_1[,.(id.a,id.t,link)],
+    mdt.key_2[,.(id.a,id.t,link)],
+    mdt.key_3[,.(id.a,id.t,link)])
 
-# So now try stringdist matrix using qgram which seems to cope well with reversal
-# stringdist('steve harris', 'steve harris', method='lcs')
-# stringdist('steve harri', 'steve harris', method='qgram')
-# stringdist('steve harri', 'rebekah harris', method='qgram')
-# stringdist('rebekah harris','steve harri',  method='qgram')
-# stringdist('steve, harris', 'harris, steve', method='osa')
-# stringdist('steve, harris', 'harris, steve', method='lcs')
-# stringdist('steve, harris', 'harris, steve', method='qgram')
-
-sdm <- stringdistmatrix(tdt.a.rev$n4, tdt.t.rev$n4, method='qgram')
-sdm.orig <- sdm
-# Use ids as row / col names
-rownames(sdm) <- tdt.a.rev$id.a
-colnames(sdm) <- tdt.t.rev$id.t
-# DEBUGGING: 2015-07-27 - [ ] problem with NA?
-# And using colRanks does not help
-# Will need to drop NA matches - @done(2015-07-31): see above
-# x <- sdm[1:10,1:10]
-# x[1,1] <- NA
-# x
-# max.col(-x, ties.method='first')
-
-mid <- max.col(-sdm, ties.method='first')
-mid <- matrix(c(1:nrow(sdm),mid),ncol=2)
-bestdis <- sdm[mid]
-r <- data.table(as.numeric(rownames(sdm)), as.numeric(colnames(sdm)[mid[,2]]), bestdis )
-setnames(r, c('id.a', 'id.t', 'dist'))
-head(r,30)
-table(r$dist) # 730 'perfect' matches?
-str(r)
-mdt.rev <- r[dist<=0, .(id.a, id.t, link='reverse')]
-head(mdt.rev)
-
-# Now merge back into the original data
-# -------------------------------------
-mdt <- rbind(mdt.key_1, mdt.names, mdt.rev)
+mdt <- merge(mdt.key, tdt.a, by='id.a', all.x=T)
+mdt <- merge(mdt, tdt.t, by='id.t', all.y=T)
 str(mdt)
-str(tdt.a)
-tdt.a[,initials:=NULL]
-tdt.a.result <- merge( tdt.a, mdt, by='id.a', all.x=TRUE )
-str(tdt.a.result)
-tdt.a.result <- merge(tdt.a.result,tdt.t,by='id.t',
-    all.x=TRUE, suffixes=c('.a','.t'))
-str(tdt.a.result)
-
-head(tdt.a.result[link=='mrn.exact'])
-nrow(tdt.a.result[link=='mrn.exact'])
-
-head(tdt.a.result[link=='name.yes'])
-nrow(tdt.a.result[link=='name.yes'])
-
-head(tdt.a.result[link=='name.poss'],20)
-nrow(tdt.a.result[link=='name.poss'])
-
-head(tdt.a.result[link=='reverse'],20)
-nrow(tdt.a.result[link=='reverse'])
 
 # Now generate a summary match quality indicator
-tdt.a.result[, pid.all.a := paste0(MRN.a,namelast.a,namefirst.a)]
-tdt.a.result[, pid.all.t := paste0(MRN.t,namelast.t,namefirst.t)]
-tdt.a.result[, pid.all.dist := stringdist(pid.all.a, pid.all.t, method='osa')]
-summary(tdt.a.result$pid.all.dist)
+str(mdt)
+mdt[, pid.a := paste(date.match.x,MRN.x,namelast.x,namefirst.x)]
+mdt[, pid.t := paste(date.match.y,MRN.y,namelast.y,namefirst.y)]
+mdt[, pid.dist := stringdist(pid.a, pid.t, method='osa')]
+summary(mdt$pid.dist)
+nrow(mdt)
+mdt[, pid.dist.cat := cut2(pid.dist, c(0:3,5,10))]
 
-# Cut and classify by distance
-require(Hmisc)
-nrow(tdt.a.result)
-tdt.a.result[, pid.all.dist.cat := cut2(pid.all.dist, c(0:3,5,10))]
-CrossTable(tdt.a.result$pid.all.dist.cat)
+CrossTable(mdt[!is.na(id.t) & labour.epidural==FALSE]$pid.dist.cat)
+mdt[pid.dist %in% c(4,5), .(id.a,id.t,pid.a,pid.t)]
 
-# Inspect with distance metrics
-head(tdt.a.result[link =='mrn.exact' & pid.all.dist!=0,
-    .(id.a, id.t, MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)])
-head(tdt.a.result[link =='name.yes' & pid.all.dist!=0,
-    .(id.a, id.t,  MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)])
-head(tdt.a.result[link =='name.poss' & pid.all.dist<5,
-    .(id.a, id.t, MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)],20)
-head(tdt.a.result[link =='reverse',
-    .(id.a, id.t, MRN.a, MRN.t, namelast.a, namelast.t, namefirst.a, namefirst.t, pid.all.dist,link)],20)
+# Now generate a date proximity indicator
+str(mdt)
+mdt[, date.dist := abs(date.match.x - date.match.y)]
+mdt[, date.dist.ok := ifelse(
+    date.dist < 180         # any date within 6 months - allows for typos
+    | as.numeric(date.dist)%%365 < 2    # allows year errors 
+    , 1, 0 )]
+describe(mdt$date.dist)
+describe(mdt$date.dist.ok)
 
-require(gmodels)
-str(tdt.a.result)
-with(tdt.a.result, CrossTable(link, missing.include=T))
+# Now define acceptable links
+mdt[, link :=   ifelse(pid.dist <= 3 & date.dist.ok, 1,
+                ifelse(pid.dist <=10 & date.dist.ok, 0, -1 ) ) ]
+
+# So look at the linkage
+CrossTable(mdt$link)
+CrossTable(mdt[!is.na(id.t) & labour.epidural==FALSE]$link)
+
+# Prepare final output using the theatre record as the master
+str(mdt)
+mdt.t <- mdt[!is.na(id.t), .(
+    id.t,
+    id.a,
+    link,
+    pid.dist,
+    pid.t,
+    pid.a,
+    procedure,      # primary or secondary
+    anaesthetic,
+    indication,
+    anaesthetist1,
+    anaesthetist2
+    ) ]
+mdt.t
