@@ -270,8 +270,6 @@ tdt.t[, key_1 := paste(
     substr(date.match,1,7))]
 tdt.t[,.(MRN,date.match,key_1,namefirst,namelast)]
 
-stop()
-
 # Anaesthetic list is longer therefore this becomes master
 nrow(tdt.a)
 nrow(tdt.t)
@@ -294,51 +292,91 @@ nrow(tdt.t)
 # - b/c time is missing then match on date but after sorting into time
 #   order and by anaesthetic database order
 
-tdt.a[,.(MRN,date)]
-str(tdt.t)
-tdt.t[,.(MRN,date)]
-
-# INSPECT
-tdt.a[1:20]
-
 nrow(tdt.a)
-setkey(tdt.a, MRN)
-tdt.a.mrn <- unique(tdt.a) # drop around 2000 rows
-nrow(tdt.a.mrn)
-setkey(tdt.t, MRN)
+setkey(tdt.a, key_1)
+tdt.a.key_1 <- unique(tdt.a) # drop around 2000 rows
+nrow(tdt.a.key_1)
+setkey(tdt.t, key_1)
 nrow(tdt.t)
-tdt.t.mrn <- unique(tdt.t) # drop around 2000 rows
-nrow(tdt.t.mrn)
+tdt.t.key_1 <- unique(tdt.t) # drop around 2000 rows
+nrow(tdt.t.key_1)
+
+# Theatre list is longer so this becomes master
+nrow(tdt.a.key_1)
+nrow(tdt.t.key_1)
 
 # Drop NAs when merging
-mdt.mrn <- merge(
-        tdt.a.mrn[!is.na(MRN)],
-        tdt.t.mrn[!is.na(MRN)],
-        by='MRN')
-mdt.mrn[,link:='mrn.exact']
-mdt.mrn <- mdt.mrn[,.(id.a, id.t, link)]
-str(mdt.mrn)
+mdt.key_1 <- merge(
+        tdt.t.key_1[!is.na(key_1)],
+        tdt.a.key_1[!is.na(key_1)],
+        by='key_1')
+mdt.key_1[,link:='key_1.exact']
+# Inspect quickly the merge
+mdt.key_1[,.(id.a,id.t,MRN.x,MRN.y,date.match.x,date.match.y,
+    namefirst.x,namefirst.y,
+    namelast.x,namelast.y
+    )]
+mdt.key_1 <- mdt.key_1[,.(id.a, id.t, link)]
+str(mdt.key_1)
 
-# Record linkage step
-# -------------------
-require(RecordLinkage)
+#  =========================
+#  = Key 2 - date and name =
+#  =========================
+# - use date and first three letters of first and last name for exact match
 
 # Now remove these merges from the data to see what remains to be matched
-tdt.a.names <- merge(tdt.a, mdt.mrn[,.(id.a, id.t,link)], by='id.a', all.x=TRUE)
+tdt.a.names <- merge(tdt.a, mdt.key_1[,.(id.a, id.t,link)], by='id.a', all.x=TRUE)
 tdt.a.names <- tdt.a.names[is.na(id.t)]
+tdt.a.names[, key_2 := paste(
+    substr(namefirst,1,3),
+    substr(namelast,1,3),
+    substr(date.match,1,7))]
+tdt.a.names[,.(id.a,MRN,date.match,key_2,namefirst,namelast)]
+tdt.a.names <- tdt.a.names[,.(id.a,MRN,date.match,key_2,namefirst,namelast)]
+# NOTE: 2015-11-25 - [ ] down to 2730 unmatched
 nrow(tdt.a.names)
 
-setkey(tdt.a.names, namelast, namefirst)
-tdt.a.names <- unique(tdt.a.names[,.(id.a,MRN,namelast,namefirst,initials,id.t=NA)])
-tdt.a.names[1:20]
-str(tdt.a.names)
-
-tdt.t.names <- merge(tdt.t, mdt.mrn[,.(id.a, id.t,link)], by='id.t', all.x=TRUE)
+tdt.t.names <- merge(tdt.t, mdt.key_1[,.(id.a, id.t,link)], by='id.t', all.x=TRUE)
 tdt.t.names <- tdt.t.names[is.na(id.a)]
-setkey(tdt.t.names, namelast, namefirst)
-tdt.t.names <- unique(tdt.t.names[,.(id.t,MRN,namelast,namefirst,initials,id.a=NA)])
-tdt.t.names[1:20]
-str(tdt.t.names)
+tdt.t.names[, key_2 := paste(
+    substr(namefirst,1,3),
+    substr(namelast,1,3),
+    substr(date.match,1,7))]
+tdt.t.names <- tdt.t.names[,.(id.t,MRN,date.match,key_2,namefirst,namelast)]
+# NOTE: 2015-11-25 - [ ] 4540 names unmatched
+nrow(tdt.t.names)
+
+# Merge step
+mdt.key_2 <- merge(
+        tdt.t.names[!is.na(key_2)],
+        tdt.a.names[!is.na(key_2)],
+        by='key_2')
+mdt.key_2[,link:='key_2.exact']
+nrow(mdt.key_2) # 698 extra merges
+str(mdt.key_2)
+
+# Inspect quickly the merge
+mdt.key_2[,.(id.a,id.t,MRN.x,MRN.y,date.match.x,date.match.y,
+    namefirst.x,namefirst.y,
+    namelast.x,namelast.y
+    )]
+mdt.key_2 <- mdt.key_2[,.(id.a, id.t, link)]
+str(mdt.key_2)
+
+#  =======================================
+#  = Record Linkage for remaining using 
+#  =======================================
+require(RecordLinkage)
+
+# setkey(tdt.a.names, namelast, namefirst)
+# tdt.a.names <- unique(tdt.a.names[,.(id.a,MRN,namelast,namefirst,initials,id.t=NA)])
+# tdt.a.names[1:20]
+# str(tdt.a.names)
+
+# setkey(tdt.t.names, namelast, namefirst)
+# tdt.t.names <- unique(tdt.t.names[,.(id.t,MRN,namelast,namefirst,initials,id.a=NA)])
+# tdt.t.names[1:20]
+# str(tdt.t.names)
 
 rpairs <- compare.linkage(tdt.a.names, tdt.t.names,
     strcmp=TRUE, strcmpfun=jarowinkler,
@@ -371,11 +409,11 @@ mdt.names
 setkey(mdt.names, id.a)
 mdt.names <- unique(mdt.names)
 mdt.names
-# str(mdt.mrn)
-# mdt.mrn <- mdt.mrn[!is.na(id.a) & !is.na(id.t), .(id.a, id.t, link)]
+# str(mdt.key_1)
+# mdt.key_1 <- mdt.key_1[!is.na(id.a) & !is.na(id.t), .(id.a, id.t, link)]
 
 # Identify remaining unmatched records
-tdt.a.rev <- merge(tdt.a, rbind(mdt.mrn, mdt.names), by='id.a', all.x=TRUE)
+tdt.a.rev <- merge(tdt.a, rbind(mdt.key_1, mdt.names), by='id.a', all.x=TRUE)
 table(tdt.a.rev$link)
 tdt.a.rev <- tdt.a.rev[is.na(id.t), .(id.a, 
     namelast, namefirst,
@@ -383,7 +421,7 @@ tdt.a.rev <- tdt.a.rev[is.na(id.t), .(id.a,
 tdt.a.rev <- tdt.a.rev[!is.na(namelast) & !is.na(namefirst)]
 tdt.a.rev
 
-x <- rbind(mdt.mrn, mdt.names)
+x <- rbind(mdt.key_1, mdt.names)
 setkey(x, id.t)
 x <- unique(x)
 tdt.t.rev <- merge(tdt.t, x , by='id.t', all.x=TRUE)
@@ -429,7 +467,7 @@ head(mdt.rev)
 
 # Now merge back into the original data
 # -------------------------------------
-mdt <- rbind(mdt.mrn, mdt.names, mdt.rev)
+mdt <- rbind(mdt.key_1, mdt.names, mdt.rev)
 str(mdt)
 str(tdt.a)
 tdt.a[,initials:=NULL]
