@@ -113,7 +113,10 @@ table(rdt.a$procedure)
 table(rdt.a$secondary)
 str(rdt.a)
 
-# Now filter out those needing theatre
+#  =========================================
+#  = Now filter out those needing theatre =
+#  =========================================
+
 rdt.a[,c(1:6,8),with=FALSE]
 table(rdt.a$indication)
 grep('mat',"Maternal request", perl=TRUE, ignore.case=FALSE)
@@ -129,12 +132,12 @@ with(rdt.a, CrossTable(indication, labour.epidural,
     prop.r=F, prop.t=T, prop.c=F, prop.chisq=F))
 rdt.a[,indication.theatre := ifelse(labour.epidural==0,T,F)]
 table(rdt.a$indication.theatre)
+str(rdt.a)
+# Filter line
+tdt.a <- rdt.a[indication.theatre==T]
 
-stop()
-
-tdt.a <- rdt.a[, .(id.a, MRN=MRN, namelast=surname, namefirst=forename)]
-# NOTE: 2015-07-31 - [ ] lots of reversed names
-tdt.a[,.(namelast,namefirst)][1:20]
+setnames(rdt.a,'surname','namelast')
+setnames(rdt.a,'forename','namefirst')
 
 # Convert all fields to UTF-8, lower case, and truncate
 tdt.a[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
@@ -148,8 +151,14 @@ tdt.a[, namefirst :=substr(tolower(namefirst),1,10)]
 # Add an initials field (for blocking later)
 # tdt.a[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.a]
 tdt.a[, initials := substr(namelast,1,1), by=id.a]
-tdt.a[,][1:20]
+# Convert date to CCYY-MM-DD
+tdt.a[,.(id.a,date)][1:20]
+tdt.a[, anaesthetic.date := 
+    as.Date(as.POSIXct(date,"%d/%m/%y", tz="GMT"))]
 str(tdt.a)
+
+# TODO: 2015-11-25 - [ ] lots of reversed names
+tdt.a[,.(namelast,namefirst)][1:20]
 
 #  ==========================
 #  = Load theatre databases =
@@ -158,12 +167,27 @@ rdf.t1 <- read.csv(
         paste0(PROJECT_PATH, 'data/150701_obs-db-theatre13-15.csv'),
         strip.white=TRUE,
         stringsAsFactors=FALSE)
+# Now work to extract 
 str(rdf.t1)
+describe(rdf.t1$Anaesthetic_start_time)
+strptime("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT")
+as.Date(as.POSIXct("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT"))
 
 rdt.t1 <- data.table(rdf.t1)
 rdt.t1[, id.t1 := .I] # unique key based on excel row number
 
-tdt.t1 <- rdt.t1[, .( id.t1, MRN=ID.HELPER, namefull=Patient.Name) ]
+tdt.t1 <- rdt.t1[, .(
+    id.t1,
+    MRN=ID.HELPER,
+    namefull=Patient.Name,
+    # Anaesthetic_start_time, # commented out, used for inspection
+    theatre.date=
+        as.Date(
+            as.POSIXct(Anaesthetic_start_time,
+            format="%d/%m/%Y %H:%M", tz="GMT"))
+    )
+    ]
+str(tdt.t1)
 
 # Convert all fields to UTF-8, lower case, and truncate
 tdt.t1[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
@@ -186,7 +210,17 @@ str(rdf.t2)
 rdt.t2 <- data.table(rdf.t2)
 rdt.t2[, id.t2 := .I] # unique key based on excel row number
 
-tdt.t2 <- rdt.t2[, .( id.t2, MRN=ID.helper, namefull=PatName) ]
+tdt.t2 <- rdt.t2[, .(
+    id.t2,
+    MRN=ID.helper,
+    # cr_prdate, # used to inspect and check conversion
+    theatre.date =
+        as.Date(
+            as.POSIXct(cr_prdate,
+            format="%d/%m/%y", tz="GMT")),
+    namefull=PatName
+    ) ]
+tdt.t2
 
 # Convert all fields to UTF-8, lower case, and truncate
 tdt.t2[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
@@ -207,19 +241,44 @@ tdt.t[, id.t := .I]
 # tdt.t[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.t]
 tdt.t[, initials := substr(namelast,1,1), by=id.t]
 
-# Start with exact merge based on hospital number
+#  ===========================================
+#  = Two data tables below ready for merging =
+#  ===========================================
+str(tdt.t)
+str(tdt.a)
+
+# Start with merge based on MRN and year-month
 # -----------------------------------------------
 # Convert empty strings to NA to avoid matching on empty string
 tdt.a[, MRN:=ifelse(str_trim(MRN)=='',NA,MRN)]
-tdt.t[, MRN:=ifelse(str_trim(MRN)=='',NA,MRN)]
 tdt.a[, namelast:=ifelse(str_trim(namelast)=='',NA,namelast)]
-tdt.t[, namelast:=ifelse(str_trim(namelast)=='',NA,namelast)]
 tdt.a[, namefirst:=ifelse(str_trim(namefirst)=='',NA,namefirst)]
+tdt.a[, date.match:=anaesthetic.date]
+# Work with last 6 chars of MRN to deal with missing leading zeros
+# Work with year-month for women having separate procedures
+tdt.a[, key_1 := paste(
+    substr(MRN,nchar(MRN)-5,nchar(MRN)),
+    substr(date.match,1,7))]
+tdt.a[,.(MRN,date.match,key_1,namefirst,namelast)]
+
+tdt.t[, MRN:=ifelse(str_trim(MRN)=='',NA,MRN)]
+tdt.t[, namelast:=ifelse(str_trim(namelast)=='',NA,namelast)]
 tdt.t[, namefirst:=ifelse(str_trim(namefirst)=='',NA,namefirst)]
+tdt.t[, date.match:=theatre.date]
+tdt.t[, key_1 := paste(
+    substr(MRN,nchar(MRN)-5,nchar(MRN)),
+    substr(date.match,1,7))]
+tdt.t[,.(MRN,date.match,key_1,namefirst,namelast)]
+
+stop()
 
 # Anaesthetic list is longer therefore this becomes master
 nrow(tdt.a)
 nrow(tdt.t)
+
+#  ============================================
+#  = END OF DATA PREPARATION - START OF MERGE =
+#  ============================================
 
 #  ==========================
 #  = START MERGE SEQUENTIAL =
@@ -227,14 +286,28 @@ nrow(tdt.t)
 # mdt <- merge(tdt.a[!is.na(MRN)],tdt.t[!is.na(MRN)],by='MRN',all.x=T)
 # NOTE: 2015-07-30 - [ ] this throws an error b/c there are duplicates @discuss
 # - for now assume excel order is chronological and work with unique
+
+# Working notes
+# - merge will need to be on hospital number and date
+# - hence split date into d/m/y fields and then with MRN make this the primary key
+#   for first merge
+# - b/c time is missing then match on date but after sorting into time
+#   order and by anaesthetic database order
+
+tdt.a[,.(MRN,date)]
+str(tdt.t)
+tdt.t[,.(MRN,date)]
+
 # INSPECT
 tdt.a[1:20]
 
+nrow(tdt.a)
 setkey(tdt.a, MRN)
-tdt.a.mrn <- unique(tdt.a)
+tdt.a.mrn <- unique(tdt.a) # drop around 2000 rows
 nrow(tdt.a.mrn)
 setkey(tdt.t, MRN)
-tdt.t.mrn <- unique(tdt.t)
+nrow(tdt.t)
+tdt.t.mrn <- unique(tdt.t) # drop around 2000 rows
 nrow(tdt.t.mrn)
 
 # Drop NAs when merging
