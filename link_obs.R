@@ -99,7 +99,7 @@ setnames(rdt.a2, 'indication.1', 'indication')
 setnames(rdt.a2, 'secondary.procedure', 'anaesthetic')
 setnames(rdt.a2, 'main.anasthetist', 'anaesthetist1') # deliberate copy of misspell
 setnames(rdt.a2, 'secondary.anaesthetist.1', 'anaesthetist2')
-setnames(rdt.a2, 'compication', 'complication')
+setnames(rdt.a2, 'compication', 'complications')
 setnames(rdt.a2, 'comments.1', 'comments')
 # Now filter out missing
 rdt.a2 <- rdt.a2[anaesthetic!="" & anaesthetic!="N/A"]
@@ -110,7 +110,6 @@ rdt.a.original <- rdt.a
 rdt.a <- rbind(rdt.a1, rdt.a2, fill=TRUE)
 names(rdt.a)
 setcolorder(rdt.a,c(1,12,2:11,13:14))
-# TODO: 2015-11-25 - [ ] fix procedure, count seems wrong
 table(rdt.a$procedure)
 table(rdt.a$secondary)
 str(rdt.a)
@@ -123,23 +122,19 @@ rdt.a[,c(1:6,8),with=FALSE]
 table(rdt.a$indication)
 grep('mat',"Maternal request", perl=TRUE, ignore.case=FALSE)
 grep('mat.*? +req.*?',"Maternal request", perl=TRUE, ignore.case=TRUE)
-table(rdt.a$indication[in])
 # Use regexp to pick out maternal request, obstetric request and epidural
 rdt.a$labour.epidural <- ifelse(
     gregexpr('m[a| ]t.*? +req.*?',rdt.a$indication, perl=TRUE, ignore.case=TRUE) >0 |
     gregexpr('^epidural.*',rdt.a$indication, perl=TRUE, ignore.case=TRUE) >0 |
     gregexpr('obs.*? +req.*?',rdt.a$indication, perl=TRUE, ignore.case=TRUE) > 0 
     ,1,0 )
-with(rdt.a, CrossTable(indication, labour.epidural, 
-    prop.r=F, prop.t=T, prop.c=F, prop.chisq=F))
+# with(rdt.a, CrossTable(indication, labour.epidural, 
+#     prop.r=F, prop.t=T, prop.c=F, prop.chisq=F))
 rdt.a[,indication.theatre := ifelse(labour.epidural==0,T,F)]
 table(rdt.a$indication.theatre)
 str(rdt.a)
 # Filter line
 tdt.a <- rdt.a[indication.theatre==T]
-
-setnames(rdt.a,'surname','namelast')
-setnames(rdt.a,'forename','namefirst')
 
 # Convert all fields to UTF-8, lower case, and truncate
 tdt.a[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
@@ -171,9 +166,10 @@ rdf.t1 <- read.csv(
         stringsAsFactors=FALSE)
 # Now work to extract 
 str(rdf.t1)
-describe(rdf.t1$Anaesthetic_start_time)
-strptime("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT")
+# describe(rdf.t1$Anaesthetic_start_time)
+# strptime("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT")
 as.Date(as.POSIXct("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT"))
+hour(as.POSIXct("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT"))
 
 rdt.t1 <- data.table(rdf.t1)
 rdt.t1[, id.t1 := .I] # unique key based on excel row number
@@ -185,6 +181,10 @@ tdt.t1 <- rdt.t1[, .(
     # Anaesthetic_start_time, # commented out, used for inspection
     theatre.date=
         as.Date(
+            as.POSIXct(Anaesthetic_start_time,
+            format="%d/%m/%Y %H:%M", tz="GMT")),
+    theatre.hour=
+        hour(
             as.POSIXct(Anaesthetic_start_time,
             format="%d/%m/%Y %H:%M", tz="GMT"))
     )
@@ -215,12 +215,13 @@ rdt.t2[, id.t2 := .I] # unique key based on excel row number
 tdt.t2 <- rdt.t2[, .(
     id.t2,
     MRN=ID.helper,
+    namefull=PatName,
     # cr_prdate, # used to inspect and check conversion
     theatre.date =
         as.Date(
             as.POSIXct(cr_prdate,
             format="%d/%m/%y", tz="GMT")),
-    namefull=PatName
+    theatre.hour = as.numeric(substr(time_anesthesia_start,1,2))
     ) ]
 tdt.t2
 
@@ -237,11 +238,6 @@ str(tdt.t2)
 
 tdt.t <- rbind(tdt.t2, tdt.t1)
 tdt.t[, id.t := .I]
-
-# Initials for blocking
-# CHANGED: 2015-07-31 - [ ] last initial only
-# tdt.t[, initials := paste0(substr(namefirst,1,1), substr(namelast,1,1)), by=id.t]
-tdt.t[, initials := substr(namelast,1,1), by=id.t]
 
 #  ===========================================
 #  = Two data tables below ready for merging =
@@ -386,22 +382,22 @@ str(tdt.t.fuzzy)
 str(tdt.t.fuzzy)
 str(tdt.a.fuzzy)
 
+# Slowest function call
 rpairs <- compare.linkage(tdt.a.fuzzy, tdt.t.fuzzy,
     strcmp=TRUE, strcmpfun=jarowinkler,
     exclude=c(1,2,3,5,6)
     # exclude=c('MRN','id.a', 'id.t', 'namefirst', 'namelast', 'date.match')
     # , blockfld=c(3) # block on date
     )
-# NOTE: 2015-11-25 - [ ] long way from default for error
-# rpairs <- epiWeights(rpairs, e=0) # calculate weights
+
 rpairs <- epiWeights(rpairs) # calculate weights
 str(rpairs)
 summary(rpairs)
 summary(rpairs$Wdata)
 # NOTE: 2015-07-31 - [ ] these commands run really slowly, only for inspection
-head(getPairs(rpairs, max.weight=0.99, min.weight=0.95),20) # run after weights
-tail(getPairs(rpairs, max.weight=0.95, min.weight=0.9),20) # run after weights
-head(getPairs(rpairs, max.weight=0.89, min.weight=0.8),20) # run after weights
+# head(getPairs(rpairs, max.weight=0.99, min.weight=0.95),20) # run after weights
+# tail(getPairs(rpairs, max.weight=0.95, min.weight=0.9),20) # run after weights
+# head(getPairs(rpairs, max.weight=0.89, min.weight=0.8),20) # run after weights
 # head(getPairs(rpairs, max.weight=0.79, min.weight=0.7),20) # run after weights
 # head(getPairs(rpairs, max.weight=0.69, min.weight=0.6),20) # run after weights
 
@@ -493,3 +489,18 @@ mdt.t <- mdt[!is.na(id.t), .(
     anaesthetist2
     ) ]
 mdt.t
+
+# Most anaesthetic fields are included - need to go back to the original
+# theatre data for the rest and merge on id.t1 and id.t2
+str(tdt.t)
+mdt.t <- merge(mdt.t, tdt.t[,.(id.t,id.t1,id.t2)], all.x=T)
+mdt.t
+
+str(tdt.t1)
+str(tdt.t2)
+
+#  ==================
+#  = Write the file =
+#  ==================
+write.csv(mdt.t, file="../data/theatre_linked.csv", row.names=FALSE)
+
