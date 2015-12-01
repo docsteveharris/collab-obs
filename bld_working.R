@@ -27,7 +27,7 @@ PROJECT_PATH <- '/Users/steve/aor/academic/collab-obs-uclh'
 EXCEL_FILE <- '151129_census.xlsx'
 DATA_FILE <- paste(PROJECT_PATH, 'data', EXCEL_FILE, sep='/')
 TAB_DATA <- '151129_census'
-setwd(paste0(PROJECT_PATH, 'src'))
+setwd(paste(PROJECT_PATH, 'src', sep='/'))
 
 library(assertthat)
 library(Hmisc)
@@ -56,44 +56,81 @@ for(year in 2009:2014) {
 	assert_that(names(d)[1]=='MRN')
 	# Make a unique key for future merging and joining
 	d <- data.table(d)
-	d[, row.num := .I]
-	d[, 'pkey' := paste(year,row.num,MRN, sep='-'), with=TRUE]
+	d[, row.num := .I] # excel sheet row number
+	d <- d[!is.na(MRN) & MRN != ""]
+	d[, 'pkey' := paste(year,row.num,MRN, sep='-'), with=TRUE] # unique key
+	setkey(d,pkey)
+	# set column names to lower case
+	for (n in names(d)) {
+		setnames(d,n,tolower(n))
+	}
 	rdt[[as.character(year)]] <- d
 	key <- c(key, d$pkey)
-	
 }
+vars <- names(d) # capture variables
+vars.original <- vars
+
 # Check key is unique
 assert_that(length(key)==length(unique(key)))
 # Check data is correct length
-assert_that(length(key)==19855)
+length(key)
+assert_that(length(key)==19810)
+
+# Create your master data table
+wdt <- data.table(key)
+setnames(wdt,'key','pkey')
+setkey(wdt,pkey)
+str(wdt)
+wdt.original <- wdt
+
+# Take a variable from one sheet and merge it against the key
+# Loop through the 5 raw tables
+# Extract the variable and the key and rbind (stack)
+# then merge
 
 
+# Now add in some error management
+#  =====================
+#  = Error correction  =
+#  =====================
+# rdt[[1]][,c(1:5),with=F]
+# rdt[[2]][,c(1:5),with=F]
 
-# Loop through the list
-rdt.all <- data.table()
-for(i in 1:2) {
-	print(paste0(as.character(2008+i), ': Importing and cleaning ...'))
-	# print(nrow(rdt[[i]]))
-	print(head(rdt[[i]][,.(MRN)]))
-	rdt.i <- rdt[[i]]
-	rdt.all <- rbind(rdt.)
+# - [ ] NOTE(2015-12-01): fix separate columns for dob date and timebirth
+rdt[[2]][,dob_timebirth := paste(dob, timebirth)]
+rdt[[3]][,dob_timebirth := paste(dob, timebirth)]
+
+# - [ ] NOTE(2015-12-01): bw instead of birth_weight in 2009-11
+setnames(rdt[[1]], 'bw', 'birth.weight')
+setnames(rdt[[2]], 'bw', 'birth.weight')
+setnames(rdt[[3]], 'bw', 'birth.weight')
+
+# - [ ] NOTE(2015-12-01): variables missing from majority therefore dropped
+vars <- vars[vars != "bw"]
+vars <- vars[vars != "episiotomy_reason"]
+vars <- vars[vars != "staff_delivery"]
+vars <- vars[vars != "ethnic_parents"]
+
+# - [ ] NOTE(2015-12-01): 
+# - ethnicity missing from 2009 but kept overall
+
+wdt <- wdt.original
+for (var in vars[2:length(vars)]) {
+	d <- data.table()
+	for (i in 1:6) {
+		r <- try({
+			x <- rdt[[i]][,c('pkey',var), with=FALSE]
+			d <- rbind(d,x)
+		}, silent=TRUE)
+		if (class(r)=="try-error") {
+			print(paste("ERROR:", var, "not found in", 2008+i, "census?"))
+			print(names(rdt[[i]]))
+		}
+		# assert_that(var %in% names(rdt[[i]])) # error check
+	}
+	setkey(d,pkey)
+	wdt <- merge(wdt,d,all.x=T)
+	# print(describe(wdt[,var,with=FALSE]))
 }
-# rdt[[1]][,1]
 
-rdt.all <- rbind(
-	rdt[[1]][,.(census=2009,MRN)],
-	rdt[[2]][,.(census=2010,MRN)]
-	# rdt[[3]][,.(census=2011,MRN)],
-	# rdt[[4]][,.(census=2012,MRN)],
-	# rdt[[5]][,.(census=2013,MRN)],
-	# rdt[[6]][,.(census=2014,MRN)]
-	)
-
-
-#  ====================
-#  = Tidy and convert =
-#  ====================
-
-
-
-
+describe(wdt)

@@ -3,24 +3,6 @@ Readme
 
 Inbox.todo
 ==========
-- merge in trainee names
-- set up a simple conference abstract
-
-
-- final table will be
-	+ 1 row per child/baby
-	+ mothers repeat
-	+ master data = census data stacked 
-		* will need unique key per MRN and baby birth_order
-
-- for each excel sheet 
-	+ import data
-	+ merge against the existing data set
-
-- theatre data
-- census data (EBLs and APGARS)
-- trainees (fuzzy merge and will need to handle dates)
-- drummond st - for blood results
 
 Notes
 =====
