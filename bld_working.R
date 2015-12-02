@@ -105,6 +105,8 @@ setnames(rdt[[1]], 'bw', 'birth.weight')
 setnames(rdt[[2]], 'bw', 'birth.weight')
 setnames(rdt[[3]], 'bw', 'birth.weight')
 
+# drop pkey from vars
+vars <- vars[vars != "pkey"]
 # - [ ] NOTE(2015-12-01): variables missing from majority therefore dropped
 vars <- vars[vars != "bw"]
 vars <- vars[vars != "episiotomy_reason"]
@@ -113,6 +115,7 @@ vars <- vars[vars != "ethnic_parents"]
 
 # - [ ] NOTE(2015-12-01): 
 # - ethnicity missing from 2009 but kept overall
+# vars <- vars[vars != "ethnicity"]
 
 wdt <- wdt.original
 for (var in vars[2:length(vars)]) {
@@ -121,7 +124,8 @@ for (var in vars[2:length(vars)]) {
 		r <- try({
 			x <- rdt[[i]][,c('pkey',var), with=FALSE]
 			d <- rbind(d,x)
-		}, silent=TRUE)
+		}, # silent=TRUE
+		)
 		if (class(r)=="try-error") {
 			print(paste("ERROR:", var, "not found in", 2008+i, "census?"))
 			print(names(rdt[[i]]))
@@ -129,8 +133,46 @@ for (var in vars[2:length(vars)]) {
 		# assert_that(var %in% names(rdt[[i]])) # error check
 	}
 	setkey(d,pkey)
-	wdt <- merge(wdt,d,all.x=T)
+	tryCatch(
+		wdt <- merge(wdt,d,all.x=T),
+		error=function(c) {
+			# c$message <- paste0(c$message, " related to names(d)\n", names(d))
+			stop(c$message)
+		}
+		)
 	# print(describe(wdt[,var,with=FALSE]))
 }
 
+str(wdt)
 describe(wdt)
+
+# Convert birth.order to numeric
+describe(wdt$birth.order)
+table(wdt$parity)
+describe(wdt$ebl)
+wdt[, `:=` (
+	birth.order = as.numeric(birth.order),
+	ebl         = as.numeric(ebl),
+	primip      = ifelse(substr(parity,0,1)==0,TRUE,FALSE),
+	dtob        = as.POSIXct(strptime(dob_timebirth, format="%d/%m/%Y %H:%M", tz="GMT"))
+	)]
+str(wdt)
+
+# - [ ] NOTE(2015-12-02): correct for 2 digit years
+library(lubridate)
+wdt[year(dtob)==11, dtob := update(dtob, year=2011)]
+table(year(wdt$dtob))
+
+# Convert dob_timebirth to date
+setorder(wdt,dtob,birth.order)
+head(wdt)
+
+
+# Plot time series for fun?
+tdt <- wdt[,.(dtob)]
+tdt[,.(dtob,week=week(dtob),year=year(dtob))]
+tdt <- tdt[,.N,by=round_date(dtob,"week")]
+setnames(tdt,'round_date','week')
+library(ggplot2)
+# drop last incomplete week 284
+qplot(y=N,x=week,data=tdt[c(-284,-1)], geom="step", ylab="births/week",xlab="")
