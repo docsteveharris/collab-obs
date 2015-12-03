@@ -109,7 +109,7 @@ str(rdt.a2)
 rdt.a.original <- rdt.a
 rdt.a <- rbind(rdt.a1, rdt.a2, fill=TRUE)
 names(rdt.a)
-setcolorder(rdt.a,c(1,12,2:11,13:14))
+setcolorder(rdt.a,c(1,12,2:11,13))
 table(rdt.a$procedure)
 table(rdt.a$secondary)
 str(rdt.a)
@@ -139,8 +139,10 @@ tdt.a <- rdt.a[indication.theatre==T]
 # Convert all fields to UTF-8, lower case, and truncate
 tdt.a[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
 tdt.a[, MRN  :=substr(tolower(MRN),1,10)]
+setnames(tdt.a,'surname','namelast')
 tdt.a[, namelast  := iconv(namelast, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
 tdt.a[, namelast  :=substr(tolower(namelast),1,10)]
+setnames(tdt.a,'forename','namefirst')
 tdt.a[, namefirst := iconv(namefirst, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
 tdt.a[, namefirst :=substr(tolower(namefirst),1,10)]
 
@@ -194,7 +196,6 @@ str(tdt.t1)
 # Convert all fields to UTF-8, lower case, and truncate
 tdt.t1[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
 tdt.t1[, MRN  :=substr(tolower(MRN),1,10)]
-
 tdt.t1[, namefull  := tolower(iconv(namefull, 'WINDOWS-1252', 'UTF-8'))]
 tdt.t1[, namelast  :=strsplit(namefull, ',')[[1]][1], by=id.t1]
 tdt.t1[, namefirst :=strsplit(namefull, ',')[[1]][2], by=id.t1]
@@ -502,5 +503,6 @@ str(tdt.t2)
 #  ==================
 #  = Write the file =
 #  ==================
+save(mdt.t, file="../data/theatre_linked.RData")
 write.csv(mdt.t, file="../data/theatre_linked.csv", row.names=FALSE)
 

@@ -118,7 +118,7 @@ vars <- vars[vars != "ethnic_parents"]
 # vars <- vars[vars != "ethnicity"]
 
 wdt <- wdt.original
-for (var in vars[2:length(vars)]) {
+for (var in vars[1:length(vars)]) {
 	d <- data.table()
 	for (i in 1:6) {
 		r <- try({
@@ -165,14 +165,29 @@ table(year(wdt$dtob))
 
 # Convert dob_timebirth to date
 setorder(wdt,dtob,birth.order)
-head(wdt)
+
+str(wdt)
+
+# LSCS
+table(wdt$delivery_route)
+wdt[, lscs:=ifelse(grepl(".*caesar.*", delivery_route,
+	ignore.case=TRUE, perl=TRUE),1,0)]
+describe(wdt$lscs)
+
+# LSCS cat
+describe(wdt$cesarean_category)
+wdt[, lscs.cat := 
+	ifelse(cesarean_category %in% c('Category 1', 'I Crash (Emergency)'), 1,
+	ifelse(cesarean_category %in% c('Category 2', 'II Urgent'), 2,
+	ifelse(cesarean_category %in% c('Category 3', 'III Scheduled', 'III Scheduled.'), 3,
+	ifelse(cesarean_category %in% c('Category 4', 'IV Planned (Elective)'), 4,
+		NA ))))]
+describe(wdt$lscs.cat)
 
 
-# Plot time series for fun?
-tdt <- wdt[,.(dtob)]
-tdt[,.(dtob,week=week(dtob),year=year(dtob))]
-tdt <- tdt[,.N,by=round_date(dtob,"week")]
-setnames(tdt,'round_date','week')
-library(ggplot2)
-# drop last incomplete week 284
-qplot(y=N,x=week,data=tdt[c(-284,-1)], geom="step", ylab="births/week",xlab="")
+# Save file
+save(wdt, file='../data/census.RData')
+# rm(list=ls(all=TRUE))
+# load(file='../data/working.RData')
+
+
