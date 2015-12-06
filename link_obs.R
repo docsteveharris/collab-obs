@@ -162,83 +162,7 @@ tdt.a[,.(namelast,namefirst)][1:20]
 #  ==========================
 #  = Load theatre databases =
 #  ==========================
-rdf.t1 <- read.csv(
-        paste0(PROJECT_PATH, 'data/150701_obs-db-theatre13-15.csv'),
-        strip.white=TRUE,
-        stringsAsFactors=FALSE)
-# Now work to extract 
-str(rdf.t1)
-# describe(rdf.t1$Anaesthetic_start_time)
-# strptime("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT")
-as.Date(as.POSIXct("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT"))
-hour(as.POSIXct("06/08/2013 08:19", "%d/%m/%Y %H:%M", tz="GMT"))
-
-rdt.t1 <- data.table(rdf.t1)
-rdt.t1[, id.t1 := .I] # unique key based on excel row number
-
-tdt.t1 <- rdt.t1[, .(
-    id.t1,
-    MRN=ID.HELPER,
-    namefull=Patient.Name,
-    # Anaesthetic_start_time, # commented out, used for inspection
-    theatre.date=
-        as.Date(
-            as.POSIXct(Anaesthetic_start_time,
-            format="%d/%m/%Y %H:%M", tz="GMT")),
-    theatre.hour=
-        hour(
-            as.POSIXct(Anaesthetic_start_time,
-            format="%d/%m/%Y %H:%M", tz="GMT"))
-    )
-    ]
-str(tdt.t1)
-
-# Convert all fields to UTF-8, lower case, and truncate
-tdt.t1[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
-tdt.t1[, MRN  :=substr(tolower(MRN),1,10)]
-tdt.t1[, namefull  := tolower(iconv(namefull, 'WINDOWS-1252', 'UTF-8'))]
-tdt.t1[, namelast  :=strsplit(namefull, ',')[[1]][1], by=id.t1]
-tdt.t1[, namefirst :=strsplit(namefull, ',')[[1]][2], by=id.t1]
-tdt.t1[, namefull := NULL]
-tdt.t1[, id.t2 := NA]
-str(tdt.t1)
-
-
-rdf.t2 <- read.csv(
-        paste0(PROJECT_PATH, 'data/150701_obs-db-theatre09-13.csv'),
-        strip.white=TRUE,
-        stringsAsFactors=FALSE)
-str(rdf.t2)
-
-rdt.t2 <- data.table(rdf.t2)
-rdt.t2[, id.t2 := .I] # unique key based on excel row number
-
-tdt.t2 <- rdt.t2[, .(
-    id.t2,
-    MRN=ID.helper,
-    namefull=PatName,
-    # cr_prdate, # used to inspect and check conversion
-    theatre.date =
-        as.Date(
-            as.POSIXct(cr_prdate,
-            format="%d/%m/%y", tz="GMT")),
-    theatre.hour = as.numeric(substr(time_anesthesia_start,1,2))
-    ) ]
-tdt.t2
-
-# Convert all fields to UTF-8, lower case, and truncate
-tdt.t2[, MRN  := iconv(MRN, 'WINDOWS-1252', 'UTF-8')] # convert windows char codes
-tdt.t2[, MRN  :=substr(tolower(MRN),1,10)]
-
-tdt.t2[, namefull  := tolower(iconv(namefull, 'WINDOWS-1252', 'UTF-8'))]
-tdt.t2[, namelast  :=str_trim(strsplit(namefull, ',')[[1]][1]), by=id.t2]
-tdt.t2[, namefirst :=str_trim(strsplit(namefull, ',')[[1]][2]), by=id.t2]
-tdt.t2[, namefull := NULL]
-tdt.t2[, id.t1 := NA]
-str(tdt.t2)
-
-tdt.t <- rbind(tdt.t2, tdt.t1)
-tdt.t[, id.t := .I]
+load('../data/theatre.RData')
 
 #  ===========================================
 #  = Two data tables below ready for merging =
@@ -503,6 +427,7 @@ str(tdt.t2)
 #  ==================
 #  = Write the file =
 #  ==================
-save(mdt.t, file="../data/theatre_linked.RData")
-write.csv(mdt.t, file="../data/theatre_linked.csv", row.names=FALSE)
+# - [ ] NOTE(2015-12-06): you need rdt.t1 and rdt.t2 here 
+save(mdt.t, tdt.t, tdt.a, file="../data/theatre_linked.RData")
+rite.csv(mdt.t, file="../data/theatre_linked.csv", row.names=FALSE)
 
