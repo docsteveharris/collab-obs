@@ -100,6 +100,9 @@ describe(wdt$birth_place)
 load('../data/theatre.RData')
 tdt.t[, birth_place := "theatre"] # add this column to force the merge to use it
 
+#  =================================
+#  = Merge theatre and census data =
+#  =================================
 # Merge 1 - using MRN and theatre and then dropping if date is too far apart
 tdt.mrn <- tdt.t
 tdt.mrn[, mrn.t := MRN]
@@ -236,102 +239,49 @@ setkey(tdt.t, id.t)
 wdt.final <- tdt.t[,tdt.t.fields,with=FALSE][wdt.final]
 str(wdt.final)
 
+save(wdt.final, file="../data/working_final.RData")
 
 
-# 3. Now do fuzzy merge on hospital number
-#    ?may want to include theatre data now?
-
-
-
-# - [ ] NOTE(2015-12-09): old code
 stop()
-load('../data/theatre_linked.RData')
-setnames(tdt.t,'MRN','mrn')
-setnames(tdt.a,'MRN','mrn')
-str(tdt.t)
-ls()
-
-
-# - [ ] NOTE(2015-12-08): debugging?
-stop()
-ls()
-
-# Merge theatre data onto census data
-# -----------------------------------
-# - [ ] NOTE(2015-12-04): goes from 19.8k census obs and finds matches
-#   in 13k of 15k theatre cases; does this mean that the other theatre
-#   cases are not related to live births??
-str(tdt.census)
-length(unique(tdt.census$pkey))
-k.census <- tdt.census[,.(pkey, mrn, dtob)]
-setkey(k.census,mrn)
-setorder(k.census,dtob,mrn)
-str(k.census)
-k.t <- tdt.t[,.(id.t, mrn, date.match)]
-setkey(k.t,mrn)
-str(k.t)
-m1 <- merge(k.census, k.t, by=c('mrn'), all.x=TRUE, suffixes=c('census','t'))
-str(m1)
-length(unique(m1$pkey)) 
-# - [ ] NOTE(2015-12-04): duplicate rows: either b/c match further
-#   admissions surgical trips (incorrect) or b/c match repeated surgical
-#   trips
-# ** Arbitrary decision ** to drop if data.diff > 1m b/c seems very
-#    unlikely to be related to same episode of illness so the merge has
-#    duplicate rows where the same MRN has matched more than once now
-#    compare dates and sort by absolute difference then drop duplicates
-#    thereby keeping the closest
-m1[, date.diff := abs(as.Date(dtob) - date.match)]
-setkey(m1,pkey,date.diff)
-m1[,.(dups=.N),by=pkey][dups>1][m1]
-m1 <- m1[,.(dups=.N),by=pkey][dups>1][m1]
-setkey(m1,pkey,date.diff,dtob)
-m1
-describe(as.numeric(m1$date.diff))
-m1 <- m1[date.diff < 30 | is.na(date.diff)]
-m1 <- m1[!is.na(id.t),.(pkey,id.t)]
-# - [ ] NOTE(2015-12-04): m1 is simply a key to use to link census and theatre data
-str(m1)
-
-# Merge census data directly onto anaesthetic data
-# ------------------------------------------------
-# - [ ] NOTE(2015-12-04): do this directly (uses MRN only) for non
-#   theatre related anaesthetics
-str(tdt.census)
-str(k.census) # see above but simplifed key for census data
+#  =======================================================
+#  = Now merge anaesthetic data onto census data via MRN =
+#  =======================================================
+# - focus on maternal requests only
+load('../data/anaesthesia.RData')
 str(tdt.a)
-k.a <- tdt.a[,.(id.a, mrn, date.match)]
-setkey(k.a,mrn)
-str(k.a)
-m2 <- merge(k.census, k.a, by=c('mrn'), all.x=TRUE, suffixes=c('census','a'))
-str(m2)
-length(unique(m2$pkey)) 
-m2[, date.diff := abs(as.Date(dtob)-date.match)]
-setkey(m2,pkey,date.diff)
-m2 <- m2[,.(dups=.N),by=pkey][dups>1][m2]
-setkey(m2,pkey,date.diff,dtob)
-m2
-describe(as.numeric(m2$date.diff))
-m2 <- m2[date.diff < 30 | is.na(date.diff)]
-m2 <- m2[!is.na(id.a),.(pkey,id.a)]
-# - [ ] NOTE(2015-12-04): m2 is simply a key to use to link census and theatre data
-str(m2)
+describe(tdt.a$labour.epidural)
+tdt.labepi <- tdt.a[labour.epidural==1]
 
 
-# Now add primary keys for anaesthesia and theatres to census
-tdt <- merge(tdt.census, m1, by='pkey', all.x=TRUE)
-tdt <- merge(tdt, m2, by='pkey', all.x=TRUE)
-setnames(tdt, 'id.a', 'id.a.direct') # direct link of anaesthetic case
-ls()
-str(mdt.t)
-# anaesthetic links via theatre merge
-tdt <- merge(tdt, mdt.t[,.(id.t, id.a.viaTheatre=id.t)], by='id.t', all.x=TRUE)
-str(tdt)
+# Merge 1 - using MRN and maternal request and then dropping if date is
+# too far apart
+tdt.mrn <- tdt.labepi
+tdt.mrn[, mrn.a := MRN]
+setnames(tdt.mrn, "MRN", "mrn")
+tdt.mrn <- tdt.mrn[,.(id.a,mrn.a,mrn,labepi.date=anaesthetic.date)]
+setkey(tdt.mrn, mrn)
+str(tdt.mrn)
 
-wdt <- tdt
+wdt.mrn <- wdt
+str(wdt.mrn)
+wdt.mrn[, mrn.w := mrn]
+(wdt.mrn <- wdt.mrn[,.(pkey,mrn,mrn.w,dob)])
+setkey(wdt.mrn, mrn)
 
-# Save file
-save(wdt, file='../data/census_plus.RData')
+mdt.mrn <- tdt.mrn[wdt.mrn]
+# Don't merge using absolute difference
+mdt.mrn[, diffdate.merge :=
+	as.numeric(difftime(labepi.date, dob, units="days"))]
+mdt.mrn[!is.na(diffdate.merge),
+	.(pkey,id.a, mrn.w, mrn.a, dob, labepi.date, diffdate.merge)][1:20]
+describe(mdt.mrn$diffdate.merge)
+# - [ ] NOTE(2015-12-15): allow labour epidurals for up to 3 days
+mdt.mrn <- mdt.mrn[diffdate.merge <= 0 & diffdate.merge >= -3]
+mdt.mrn[, mkey := "mrn"] # label the key
+str(mdt.mrn)
 
-
+message(paste(
+	"Matched", nrow(mdt.mrn),
+	"of", sum(tdt.a$labour.epidural), "labour epidurals"
+	 ))
 
