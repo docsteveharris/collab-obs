@@ -125,7 +125,6 @@ mdt.mrn[, mkey := "mrn"] # label the key
 str(mdt.mrn)
 # - [ ] NOTE(2015-12-11): @wow 12k of 19k go through theatres!
 
-# - [ ] NOTE(2015-12-11): @resume(2015-12-11)
 # Merge 2 - use MRN (first part, last part then fuzzy, then string distance)
 # 1. first remove existing matches? common key is id.t
 str(tdt.t)
@@ -246,11 +245,12 @@ stop()
 #  =======================================================
 #  = Now merge anaesthetic data onto census data via MRN =
 #  =======================================================
-# - focus on maternal requests only
+# - focus on maternal requests only (and first attempts)
 load('../data/anaesthesia.RData')
 str(tdt.a)
 describe(tdt.a$labour.epidural)
-tdt.labepi <- tdt.a[labour.epidural==1]
+tdt.labepi <- tdt.a[labour.epidural==1 & secondary == FALSE]
+str(tdt.labepi)
 
 
 # Merge 1 - using MRN and maternal request and then dropping if date is
@@ -282,6 +282,150 @@ str(mdt.mrn)
 
 message(paste(
 	"Matched", nrow(mdt.mrn),
-	"of", sum(tdt.a$labour.epidural), "labour epidurals"
+	"of", nrow(tdt.labepi), "labour epidurals"
 	 ))
 
+
+# Merge 2 - use MRN (first part, last part then fuzzy, then string distance)
+# 1. first remove existing matches? common key is id.a
+str(tdt.labepi)
+str(mdt.mrn)
+setkey(tdt.labepi, id.a)
+setkey(mdt.mrn, id.a)
+tdt.labepi.fuzzy <- mdt.mrn[,.(mkey,id.a)][tdt.labepi][is.na(mkey)]
+str(tdt.labepi.fuzzy)
+setnames(tdt.labepi.fuzzy, "mrn", "mrn.a")
+names(tdt.labepi.fuzzy) # drop unessential columns
+(tdt.labepi.fuzzy <- tdt.labepi.fuzzy[,c(1,2,7,18),with=FALSE])
+
+# Now do the same for the census data - common key is pkey
+str(wdt)
+str(mdt.mrn)
+setkey(wdt, pkey)
+setkey(mdt.mrn, pkey)
+wdt.fuzzy <- mdt.mrn[,.(mkey,pkey)][wdt][is.na(mkey) & birth_place=="theatre"]
+names(wdt.fuzzy)
+setnames(wdt.fuzzy, "mrn", "mrn.w")
+(wdt.fuzzy <- wdt.fuzzy[,c(1,2,5,10),with=FALSE]) # necessary columns only
+
+# 2	Create a 'block' - convert to numerical then round the date
+# - [ ] NOTE(2015-12-15): initially blocked on month but too few matches
+library(lubridate)
+wdt.fuzzy[, date.round := as.numeric(round_date(dob, "year"))]
+# wdt.fuzzy[, date.round := as.numeric(round_date(dob, "month"))]
+tdt.labepi.fuzzy[, date.round := as.numeric(round_date(anaesthetic.date, "month"))]
+str(wdt.fuzzy)
+str(tdt.labepi.fuzzy)
+
+# drop blocking because much smaller data
+rpairs <- compare.linkage(
+	wdt.fuzzy,
+	tdt.labepi.fuzzy,
+	blockfld = 5,
+    strcmp=TRUE, strcmpfun=jarowinkler,
+    # exclude=c(1,2,4)
+    # exclude=c(1,2,4,5)
+    )
+
+rpairs <- epiWeights(rpairs) # calculate weights
+str(rpairs)
+summary(rpairs)
+summary(rpairs$Wdata)
+
+head(getPairs(rpairs, max.weight=0.99, min.weight=0.95),20) # run after weights
+
+# Now classify
+rlink <- epiClassify(rpairs, 0.95, 0.85)
+lpairs <- rlink$pairs
+link.yes <- lpairs[rlink$prediction=='L',]
+link.poss <- lpairs[rlink$prediction=='P',]
+
+# Now subset
+mdt.fuzzy.yes <- cbind(
+    wdt.fuzzy[link.yes$id1,.(pkey,mrn.w,dob)],
+    tdt.labepi.fuzzy[link.yes$id2,.(id.a,mrn.a,anaesthetic.date,link='fuzzy.yes')])
+mdt.fuzzy.yes
+mdt.fuzzy.poss <- cbind(
+    wdt.fuzzy[link.poss$id1,.(pkey,mrn.w,dob)],
+    tdt.labepi.fuzzy[link.poss$id2,.(id.a,mrn.a,anaesthetic.date,link='fuzzy.poss')])
+mdt.fuzzy.poss
+mdt.fuzzy <- rbind(mdt.fuzzy.yes, mdt.fuzzy.poss)
+mdt.fuzzy
+
+# Now set limits on data difference
+mdt.fuzzy[, diffdate.merge := as.numeric(difftime(anaesthetic.date, dob, units="days"))]
+mdt.fuzzy[,.(pkey, id.a, mrn.w, mrn.a,  dob, anaesthetic.date, diffdate.merge)]
+mdt.fuzzy <- mdt.fuzzy[diffdate.merge <= 0 & diffdate.merge >= -3]
+mdt.fuzzy[, mkey := "fuzzy"] # label the key
+mdt.fuzzy
+
+# Now remove duplicates but first sort by string dist
+mdt.fuzzy[, mrn.dist := stringdist(mrn.w, mrn.a, method='jw')]
+
+setorder(mdt.fuzzy,pkey,mrn.dist)
+mdt.fuzzy
+setkey(mdt.fuzzy, pkey)
+mdt.fuzzy <- unique(mdt.fuzzy)
+mdt.fuzzy
+setorder(mdt.fuzzy,mrn.dist)
+setkey(mdt.fuzzy, mrn.dist)
+mdt.fuzzy
+
+# Repeat remove of duplicates (this time of id.a dups)
+setorder(mdt.fuzzy,id.a,mrn.dist)
+mdt.fuzzy
+setkey(mdt.fuzzy, id.a)
+mdt.fuzzy <- unique(mdt.fuzzy)
+mdt.fuzzy
+
+# Now drop unlikely merges
+setorder(mdt.fuzzy,mrn.dist)
+lapply(c(0:10), function(x) head(mdt.fuzzy[mrn.dist < x/10 & mrn.dist >= (x-1)/10]))
+tail(mdt.fuzzy[mrn.dist <0.15])
+
+# - [ ] NOTE(2015-12-15): manually tuning merges allowed through
+(mdt.fuzzy <- mdt.fuzzy[mrn.dist < 0.1])
+nrow(mdt.fuzzy)
+
+# Now bind mdt.mrn and mdt.fuzzy and merge back onto census
+(mdt <- rbind(
+	mdt.mrn[,.(pkey,id.a,mkey,mrn.w,mrn.a)], 
+	mdt.fuzzy[,.(pkey,id.a,mkey,mrn.w,mrn.a)]
+	))
+mdt[, mrn.dist := stringdist(mrn.w, mrn.a, method='jw')]
+setorder(mdt,pkey,mrn.dist)
+setkey(mdt, pkey)
+mdt<- unique(mdt)
+nrow(mdt)
+
+message(paste(
+	"Fuzzy merges:", nrow(mdt.fuzzy), 
+	"\nMatched (after additional fuzzy merge)", nrow(mdt.mrn),
+	"of", nrow(tdt.labepi), "labour epidurals"
+	 ))
+
+# Now merge working data and theatre data
+mdt
+setkey(wdt.final, pkey)
+wdt.final <- mdt[,.(pkey,id.a.labepi=id.a,mrn.dist.labepi=mrn.dist)][wdt.final]
+# wdt.final$i.id.mother <- NULL
+assert_that(nrow(wdt.final)==nrow(unique(wdt.final)))
+wdt.final[, match.labepi := ifelse(is.na(id.a.labepi),0,1)]
+# 97% merge OK
+describe(wdt.final$match.labepi) 
+wdt.final
+with(wdt.final, CrossTable(round_date(dob, "year"), birth_place))
+# - [ ] NOTE(2015-12-15): v poor matching in 2010 ? problems with data
+with(wdt.final, CrossTable(round_date(dob, "year"), match.labepi))
+
+# Define the fields you want to bring in from tdt
+names(tdt.labepi)
+
+tdt.t.fields <- c("id.t",
+	"theatre.hour", "priority", "anaesthesia.time", "surgical.time")
+setkey(wdt.final, id.t)
+setkey(tdt.t, id.t)
+wdt.final <- tdt.t[,tdt.t.fields,with=FALSE][wdt.final]
+str(wdt.final)
+
+save(wdt.final, file="../data/working_final.RData")
