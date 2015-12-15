@@ -144,7 +144,7 @@ for (var in vars[1:length(vars)]) {
 }
 
 str(wdt)
-describe(wdt)
+# describe(wdt)
 
 # Convert birth.order to numeric
 describe(wdt$birth.order)

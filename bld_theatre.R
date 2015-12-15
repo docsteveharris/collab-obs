@@ -146,4 +146,5 @@ setcolorder(tdt.t,
     c("id.t", "id.t1", "id.t2", names(tdt.t)[c(-1,-10,-11)]))
 tdt.t
 
-save(tdt.t, rdt.t1, rdt.t2, file='../data/theatre.RData')
+setnames(tdt.t,'MRN','mrn')
+save(tdt.t, file='../data/theatre.RData')
