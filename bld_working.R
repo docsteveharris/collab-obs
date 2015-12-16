@@ -426,6 +426,147 @@ tdt.t.fields <- c("id.t",
 setkey(wdt.final, id.t)
 setkey(tdt.t, id.t)
 wdt.final <- tdt.t[,tdt.t.fields,with=FALSE][wdt.final]
+
+# Let's do some tidying of these data so they are close to ready for export
 str(wdt.final)
+setkey(wdt.final, pkey)
+assert_that(nrow(wdt.final)==nrow(unique(wdt.final)))
+wdt <- wdt.final[,.(
+	id.birth=as.numeric(id.birth),
+	id.mother,
+	pkey,
+	dtob,
+	dob,
+	birth.seq,
+	birth_place,
+	match.theatre,
+	id.theatre = id.t,
+	priority,
+	anaesthesia.time,
+	surgical.time,
+	match.labepi,
+	id.labepi = id.a
+	)]
+setkey(wdt.final, id.birth)
+assert_that(nrow(wdt)==nrow(unique(wdt)))
+head(wdt)
+
+# Merge the remaining census fields
+names(wdt)
+str(tdt.census)
+names(tdt.census)
+# - [ ] NOTE(2015-12-16): do this var by var - seems clumsy but can check as you do it 
+
+# mat_age
+wdt <- merge(wdt, tdt.census[,.(pkey, age.mother=mat_age)],
+	by="pkey", all.x=TRUE)
+describe(wdt$age.mother)
+
+# labour_type
+table(tdt.census$labour_type)
+wdt <- merge(wdt, tdt.census[,.(pkey,
+	labour.type = 
+	ifelse(grepl(".*spont.*", labour_type, ignore.case=T, perl=T), "spontaneous",
+	ifelse(grepl(".*section*", labour_type, ignore.case=T, perl=T), "csection",
+	ifelse(grepl(".*induction*", labour_type, ignore.case=T, perl=T), "induction",
+		"other" ))))
+		],
+		by="pkey", all.x=TRUE)
+describe(wdt$labour.type)
+
+# lscs
+# lscs.cat
+wdt <- merge(wdt, tdt.census[,.(pkey, lscs, lscs.cat)],
+	by="pkey", all.x=TRUE)
+describe(wdt$lscs)
+describe(wdt$lscs.cat)
+
+# birth_place - already imported
+setnames(wdt, "birth_place", "birth.place")
+
+# parity - primip imported
+# primip
+wdt <- merge(wdt, tdt.census[,.(pkey, primip)],
+	by="pkey", all.x=TRUE)
+describe(wdt$primip)
+
+
+
+# smoking
+# bmi
+# anaesthesia
+# presentation_deliver
+# presentation_birth
+# delivery_route
+# route.of.birth
+# instrumental_delivery
+# caesarean_indication
+# cesarean_category
+# ebl
+# mrp
+# episiotomy
+# grade_tear
+# site_tear
+# first_duration
+# second_duration
+# third_duration
+# birth.order
+# estimated_birth_gest
+# birth.weight
+# birth_outcome
+# apgar_1
+# apgar_5
+# apgar_10
+# cord_gases
+# arterial_ph
+# venous_ph
+# nnu_admission
+# ethnicity
+# row.num
+# dtob
+
+
+
 
 save(wdt.final, file="../data/working_final.RData")
+
+#  =====================================================
+#  = Link theatre ID to anaesthetic ID as per link_obs =
+#  =====================================================
+# load("../data/working_final.RData")
+ls()
+str(wdt.final)
+
+
+#  ====================================================
+#  = Bring in linked data - and filter for c-sections =
+#  ====================================================
+
+load("../data/theatre_linked.RData")
+str(mdt.t)
+table(mdt.t$indication)
+mdt.t$csection <- ifelse(
+    gregexpr("^.*?section.*?",mdt.t$indication, perl=TRUE, ignore.case=TRUE) >0 |
+    gregexpr("^.*?lscs*?",mdt.t$indication, perl=TRUE, ignore.case=TRUE) > 0 
+    ,1,0 )
+with(mdt.t, table(indication, csection))
+mdt.t.csection <- mdt.t[csection==1]
+setkey(mdt.t.csection, id.t)
+nrow(mdt.t.csection)-nrow(unique(mdt.t.csection))
+# Should *not* have duplicates
+setorder(mdt.t.csection, id.t, pid.dist, pid.t)
+setkey(mdt.t.csection, id.t)
+mdt.t.csection <- unique(mdt.t.csection)
+assert_that(nrow(mdt.t.csection)==nrow(unique(mdt.t.csection)))
+
+
+# Now merge theatre in census to anaesthetic procedure
+temp <- merge(wdt.final, mdt.t.csection, by="id.t",
+	all.x=TRUE, all.y=FALSE, incomparables=NA,
+	suffixes = c(".census", ".lscs") )
+str(temp)
+table(temp$anaesthetic)
+
+library(lubridate)
+temp[,.(round(sum(csection,na.rm=TRUE)/.N*100),.N), by=round_date(dob, "month")]
+

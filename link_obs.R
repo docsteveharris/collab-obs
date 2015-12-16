@@ -325,5 +325,5 @@ str(tdt.t2)
 #  ==================
 # - [ ] NOTE(2015-12-06): you need rdt.t1 and rdt.t2 here 
 save(mdt.t, tdt.t, tdt.a, file="../data/theatre_linked.RData")
-rite.csv(mdt.t, file="../data/theatre_linked.csv", row.names=FALSE)
+write.csv(mdt.t, file="../data/theatre_linked.csv", row.names=FALSE)
 
