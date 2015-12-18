@@ -133,9 +133,14 @@ tdt.a[, initials := substr(namelast,1,1), by=id.a]
 tdt.a[,.(id.a,date)][1:20]
 tdt.a[, anaesthetic.date := 
     as.Date(as.POSIXct(date,"%d/%m/%y", tz="GMT"))]
+setnames(tdt.a, "MRN", "mrn")
 str(tdt.a)
+
+str(rdt.a1)
+str(rdt.a2)
 
 # TODO: 2015-11-25 - [ ] lots of reversed names
 tdt.a[,.(namelast,namefirst)][1:20]
 
 save(tdt.a, file="../data/anaesthesia.RData")
+write.csv(tdt.a, "../data/wdt.anaes.csv" )

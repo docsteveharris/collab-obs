@@ -105,8 +105,7 @@ tdt.t[, birth_place := "theatre"] # add this column to force the merge to use it
 #  =================================
 # Merge 1 - using MRN and theatre and then dropping if date is too far apart
 tdt.mrn <- tdt.t
-tdt.mrn[, mrn.t := MRN]
-setnames(tdt.mrn, "MRN", "mrn")
+tdt.mrn[, mrn.t := mrn]
 tdt.mrn <- tdt.mrn[,.(id.t,mrn.t,mrn,birth_place,theatre.date)]
 setkey(tdt.mrn, mrn, birth_place )
 str(tdt.mrn)
@@ -240,8 +239,6 @@ str(wdt.final)
 
 save(wdt.final, file="../data/working_final.RData")
 
-
-stop()
 #  =======================================================
 #  = Now merge anaesthetic data onto census data via MRN =
 #  =======================================================
@@ -256,8 +253,7 @@ str(tdt.labepi)
 # Merge 1 - using MRN and maternal request and then dropping if date is
 # too far apart
 tdt.mrn <- tdt.labepi
-tdt.mrn[, mrn.a := MRN]
-setnames(tdt.mrn, "MRN", "mrn")
+tdt.mrn[, mrn.a := mrn]
 tdt.mrn <- tdt.mrn[,.(id.a,mrn.a,mrn,labepi.date=anaesthetic.date)]
 setkey(tdt.mrn, mrn)
 str(tdt.mrn)
@@ -323,9 +319,9 @@ rpairs <- compare.linkage(
 	tdt.labepi.fuzzy,
 	blockfld = 5,
     strcmp=TRUE, strcmpfun=jarowinkler,
-    # exclude=c(1,2,4)
+    exclude=c(1,2,4)
     # exclude=c(1,2,4,5)
-    )
+)
 
 rpairs <- epiWeights(rpairs) # calculate weights
 str(rpairs)
@@ -490,83 +486,85 @@ wdt <- merge(wdt, tdt.census[,.(pkey, primip)],
 	by="pkey", all.x=TRUE)
 describe(wdt$primip)
 
-
-
-# smoking
 # bmi
-# anaesthesia
-# presentation_deliver
-# presentation_birth
-# delivery_route
-# route.of.birth
-# instrumental_delivery
-# caesarean_indication
-# cesarean_category
-# ebl
-# mrp
-# episiotomy
-# grade_tear
-# site_tear
-# first_duration
-# second_duration
-# third_duration
-# birth.order
-# estimated_birth_gest
-# birth.weight
-# birth_outcome
-# apgar_1
-# apgar_5
-# apgar_10
-# cord_gases
-# arterial_ph
-# venous_ph
-# nnu_admission
-# ethnicity
-# row.num
-# dtob
+wdt <- merge(wdt, tdt.census[,.(pkey, bmi)],
+	by="pkey", all.x=TRUE)
+describe(wdt$bmi)
+
+# Duration of stages of labour
+# Custom function to import times
+hm.clean <- function(s) {
+	require(lubridate)
+	# Converts string to a timestamp to parse (takes advantage of lubridate)
+	# but therefore fails with "32h 30m" b/c times cannot be > 24h
+	# problematic for 64 of 19k
+	t <- parse_date_time(s, orders=c("H!M!", "H!M!S!", "M!", "H!"), truncated=1)-ymd("0000-01-01")
+	return(as.numeric(round(t/3600,2)))
+}
+wdt <- merge(wdt,
+		tdt.census[,.(pkey,
+		 stage1.hrs=hm.clean(first_duration),
+		 stage2.hrs=hm.clean(second_duration),
+		 stage3.hrs=hm.clean(third_duration)
+		 )],
+	by="pkey", all.x=TRUE)
+describe(wdt$stage1.hrs)
+describe(wdt$stage2.hrs)
+describe(wdt$stage3.hrs)
+
+# APGAR scores
+wdt <- merge(wdt,
+		tdt.census[,.(pkey,
+		apgar01=apgar_1,
+		apgar05=apgar_5,
+		apgar10=apgar_10
+		 )],
+	by="pkey", all.x=TRUE)
+describe(wdt$apgar01)
+describe(wdt$apgar05)
+describe(wdt$apgar10)
+
+# Cord gases and arterial pH and NNU admission
+wdt <- merge(wdt,
+		tdt.census[,.(pkey,
+		cord.gases=ifelse(cord_gases=="Yes",1,0),
+		cord.ph=arterial_ph,
+		nnu.admx=ifelse(nnu_admission,1,0)
+		 )],
+	by="pkey", all.x=TRUE)
+describe(wdt$cord.gases)
+describe(wdt$cord.ph)
+describe(wdt$nnu.admx)
+
+# Delivery route
+describe(tdt.census$delivery_route)
+wdt <- merge(wdt, tdt.census[,.(pkey,
+	delivery.route = 
+	ifelse(grepl(".*caesar.*", delivery_route, ignore.case=T, perl=T), "csection",
+	ifelse(grepl(".*vaginal*", delivery_route, ignore.case=T, perl=T), "vaginal",
+		"other" )))
+		],
+		by="pkey", all.x=TRUE)
+describe(wdt$delivery.route)
+
+wdt[, dob.hr := round_date(dtob,unit="hour")]
+names(tdt.census)
+str(wdt)
 
 
 
 
-save(wdt.final, file="../data/working_final.RData")
-
-#  =====================================================
-#  = Link theatre ID to anaesthetic ID as per link_obs =
-#  =====================================================
-# load("../data/working_final.RData")
+#  ================
+#  = Final export =
+#  ================
 ls()
-str(wdt.final)
+str(tdt.a)
 
+wdt.export <- wdt
+wdt.export$pkey <- NULL
+setorder(wdt.export,id.birth)
+str(wdt.export)
 
-#  ====================================================
-#  = Bring in linked data - and filter for c-sections =
-#  ====================================================
-
-load("../data/theatre_linked.RData")
-str(mdt.t)
-table(mdt.t$indication)
-mdt.t$csection <- ifelse(
-    gregexpr("^.*?section.*?",mdt.t$indication, perl=TRUE, ignore.case=TRUE) >0 |
-    gregexpr("^.*?lscs*?",mdt.t$indication, perl=TRUE, ignore.case=TRUE) > 0 
-    ,1,0 )
-with(mdt.t, table(indication, csection))
-mdt.t.csection <- mdt.t[csection==1]
-setkey(mdt.t.csection, id.t)
-nrow(mdt.t.csection)-nrow(unique(mdt.t.csection))
-# Should *not* have duplicates
-setorder(mdt.t.csection, id.t, pid.dist, pid.t)
-setkey(mdt.t.csection, id.t)
-mdt.t.csection <- unique(mdt.t.csection)
-assert_that(nrow(mdt.t.csection)==nrow(unique(mdt.t.csection)))
-
-
-# Now merge theatre in census to anaesthetic procedure
-temp <- merge(wdt.final, mdt.t.csection, by="id.t",
-	all.x=TRUE, all.y=FALSE, incomparables=NA,
-	suffixes = c(".census", ".lscs") )
-str(temp)
-table(temp$anaesthetic)
-
-library(lubridate)
-temp[,.(round(sum(csection,na.rm=TRUE)/.N*100),.N), by=round_date(dob, "month")]
+save(wdt,wdt.export, file="../data/working.RData")
+write.csv(wdt.export, "../data/wdt.export.cvs" )
 

@@ -144,7 +144,8 @@ str(tdt.t)
 names(tdt.t)
 setcolorder(tdt.t, 
     c("id.t", "id.t1", "id.t2", names(tdt.t)[c(-1,-10,-11)]))
-tdt.t
+
 
 setnames(tdt.t,'MRN','mrn')
 save(tdt.t, file='../data/theatre.RData')
+write.csv(tdt.t, "../data/wdt.theatre.csv" )

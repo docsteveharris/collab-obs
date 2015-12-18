@@ -4,12 +4,27 @@ Readme
 Inbox.todo
 ==========
 
+- trainee (link to ... later)
+- 
+
+
 Notes
 =====
 
 - Perv sent 7-zip file
 - password for excel Pervez97!
 - password for 7zip Cr!cket97
+
+Possible qns
+
+1. weekend / ooh vs weekday outcomes. Cord gases, ebl, block complications
+2. Weekend / ooh vs weekday anaesthetic technique for cat 1-4 section
+3. Time from anaesthesia to surgery for cat 1-4 sections broken down by training grade 
+4. Incidence of anaesthetic technique used for cat 1-4 sections. Is this different ooh for cat 1-3?
+5. Incidence of complications according to training grade and ooh
+6. Anaesthesia to surgery time weekday vs ooh
+7. Surgery time weekday vs ooh
+8. Has our technique for cat 1 changed (ha vs spinal) over past 5 years?
 
 Field names from wish list database
 
