@@ -548,6 +548,7 @@ wdt <- merge(wdt, tdt.census[,.(pkey,
 describe(wdt$delivery.route)
 
 wdt[, dob.hr := round_date(dtob,unit="hour")]
+wdt[, dob.hr := hour(dtob)]
 names(tdt.census)
 str(wdt)
 
@@ -562,6 +563,9 @@ str(tdt.a)
 
 wdt.export <- wdt
 wdt.export$pkey <- NULL
+wdt.export$mrn <- NULL
+wdt.export$mrn.w <- NULL
+wdt.export$i.id.mother <- NULL
 setorder(wdt.export,id.birth)
 str(wdt.export)
 
