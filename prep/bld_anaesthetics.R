@@ -139,13 +139,18 @@ str(tdt.a)
 
 setnames(tdt.a, "anaesthetic", "anaesthetic.text")
 tdt.a[, anaesthetic :=
-	ifelse(grepl(".*c\\.?s\\.?e.*", anaesthetic, ignore.case=T, perl=T), "CSE",
-	ifelse(grepl(".*top*", anaesthetic, ignore.case=T, perl=T), "Top-up",
-	ifelse(grepl(".*epid*", anaesthetic, ignore.case=T, perl=T), "Epidural",
-	ifelse(grepl(".*spin*", anaesthetic, ignore.case=T, perl=T), "Spinal",
-	ifelse(grepl(".*g\\.?a.*", anaesthetic, ignore.case=T, perl=T), "Spinal",
+	ifelse(grepl(".*c\\.?s\\.?e.*", anaesthetic.text, ignore.case=T, perl=T), "CSE",
+	ifelse(grepl(".*top*", anaesthetic.text, ignore.case=T, perl=T), "Top-up",
+	ifelse(grepl(".*epid*", anaesthetic.text, ignore.case=T, perl=T), "Epidural",
+	ifelse(grepl(".*spin*", anaesthetic.text, ignore.case=T, perl=T), "Spinal",
+	ifelse(grepl(".*g\\.?a.*", anaesthetic.text, ignore.case=T, perl=T), "Spinal",
 		"Other" ))))) ]
 with(tdt.a, CrossTable(anaesthetic, anaesthetic.text))
+
+# Clean impossible dates
+require(lubridate)
+tdt.a[as.POSIXct(anaesthetic.date) < ymd("2009-01-01"), anaesthetic.date:=NA]
+tdt.a[as.POSIXct(anaesthetic.date) >= ymd("2015-07-01"), anaesthetic.date:=NA]
 
 str(rdt.a1)
 str(rdt.a2)

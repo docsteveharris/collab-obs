@@ -566,5 +566,5 @@ setorder(wdt.export,id.birth)
 str(wdt.export)
 
 save(wdt,wdt.export, file="../data/working.RData")
-write.csv(wdt.export, "../data/wdt.export.cvs" )
+write.csv(wdt.export, "../data/wdt.export.csv" )
 
