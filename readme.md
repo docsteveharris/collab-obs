@@ -1,21 +1,5 @@
-Readme
-======
-
-Inbox.todo
-==========
-
-- trainee (link to ... later)
-- 
-
-
-Notes
-=====
-
-- Perv sent 7-zip file
-- password for excel Pervez97!
-- password for 7zip Cr!cket97
-
-Possible qns
+inbox:
+	Possible qns
 
 1. weekend / ooh vs weekday outcomes. Cord gases, ebl, block complications
 2. Weekend / ooh vs weekday anaesthetic technique for cat 1-4 section
@@ -25,91 +9,73 @@ Possible qns
 6. Anaesthesia to surgery time weekday vs ooh
 7. Surgery time weekday vs ooh
 8. Has our technique for cat 1 changed (ha vs spinal) over past 5 years?
+	
+issues:
 
-Field names from wish list database
+- things to discuss or raise with Perv
+	- missing theatre procedure for 2013-15
+		could do a sensitivity analysis to check that are picking up births correctly in the previous data
+	- explain data concept
+		working with 'births' as the unit of analysis here rather than mothers so this will not capture anaesthetic work for maternal only indications such as retained products, 3rd degree tear etc
+	- v low rates of labour epidural in 2009-10 etc ?poor reporting
+		- need to work out a metric for checking quality here
 
-MRN
-DOB
-timebirth
-Mat_age
-birth_no
-labour_type
-birth_place
-Parity
-Smoking
-bmi
-Presentation_birth
-delivery_route
-Instrumental_delivery
-delivery_outcome
-EBL
-MRP
-episiotomy
-grade_tear
-site_tear
-first_duration
-second_duration
-third_duration
-Birth order
-estimated_birth_gest
-BW
-birth_outcome
-Apgar_1
-Apgar_5
-Apgar_10
-Cord_gases
-Arterial_pH
-Venous_pH
-NNU_admission
-Ethnicity baby
-ethnicity parents
-primary anaes technique
-indication
-prim surg proc CODE
-primary ansthetist
-GRADE
-secondary anaesthetist
-GRADE
-complications
-secondary procedure
-indication
-main anasthetist
-GRADE
-secondary anaesthetist
-GRADE
-compication
-ADP
-Headache?
-typical of dural puncture?
-backache
-neuro?
-happy?
-time_anesthesia_start
-time_actual_procedure_start
-time_actual_procedure_end
-time_pat_out_of_room
-Hb pre anaesthetic
-plt count pre
-Hb post
-plt post
-lowest Hb
-lowest plt 
-wcc pre anaesthetic if on same day
-INR pre
-APTTr pre
-highest creat
-Na
-K
-higherst urate
-lowest fibrinogen
+continue:
+	- fields
+		- anaesthetic technique from anaesthetic data
+	- produce workload plots
+		report per 'shift' (i.e. 12 hours)
+	- plot
+		- from anaesthetic data
+			- labour epidurals over time 
+				- by time of day
+			- theatre cases over time
+				- by time of day
 
+@next:
+- extract and clean consultant obs data from theatre database for surgical seniority?
+- merge in trainee names
+- set up a simple conference abstract
 
-Log
-===
-
-2015-11-24
-- tidying before meeting Perv and Ali
+@later:
+	theatre data:
+		- import theatre name to identify when there are 2 theatres running overnight
+		- surgeon name (for seniority) 
+	anaesthetic data:
+		- import shift (in or out of hours)
+	other:
+	- remaining merges
+		- bloods from drummond street data
+		- estimated blood loss from theatre data
+	- write a generic merge module for ID (e.g. MRN) plus date?
+		you will have to repeat similar merges for
+		- census to theatre
+		- census to blood results (maternal)
+		- census to anaesthetic (where cases don't go theatre)
+	
 
 
 
-
+Archive:
+	✔ bmi @done (15-12-18 17:57)
+	✔ duration of labour (first >> 2nd) @done (15-12-18 22:30)
+	✔ apgar @done (15-12-18 22:39)
+	✔ cord ph @done (15-12-18 22:39)
+	✔ nnu admission @done (15-12-18 22:39)
+	- delivery_route @done(2015-12-18)
+	- do template merge of theatre data onto census @done(2015-12-12)
+		- use MRN + date difference (perfect)
+		- use MRN fuzzy?
+	- quick plot of @done(2015-12-15)
+	- maternal requests only @done(2015-12-16)
+		- use merge approach as above	@done(2015-12-15)
+			- perfect
+			- MRN fuzzy
+	- need operating times @done(2015-12-11)
+	- complete anaesthetic delay time @done(2015-12-11)
+	- import census data @done(2015-11-30)
+		- x 5 sheets @done(2015-11-30)
+	- create a single unique key @done(2015-11-30)
+	- proof of principle @done(2015-12-01)
+		- bring in mat_age @done(2015-12-01)
+	- stack and merge census data into single data.table @done(2015-12-01)
