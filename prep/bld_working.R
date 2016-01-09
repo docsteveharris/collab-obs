@@ -290,13 +290,29 @@ describe(wdt$apgar10)
 wdt <- merge(wdt,
 		tdt.census[,.(pkey,
 		cord.gases=ifelse(cord_gases=="Yes",1,0),
-		cord.ph=arterial_ph,
+		ph.arterial=arterial_ph,
+		ph.venous=venous_ph,
 		nnu.admx=ifelse(nnu_admission,1,0)
 		 )],
 	by="pkey", all.x=TRUE)
 describe(wdt$cord.gases)
-describe(wdt$cord.ph)
+describe(wdt$ph.venous)
+describe(wdt$ph.arterial)
 describe(wdt$nnu.admx)
+
+# anaesthesia type
+str(wdt)
+wdt <- merge(wdt,
+		tdt.census[,.(pkey,
+			anaesthetic.census = 
+	ifelse(grepl(".*GA.*", anaesthesia, ignore.case=F, perl=T), "GA",
+	ifelse(grepl(".*epidural and spinal.*", anaesthesia, ignore.case=T, perl=T), "CSE",
+	ifelse(grepl(".*spinal.*", anaesthesia, ignore.case=T, perl=T), "Spinal",
+	ifelse(grepl(".*epidural*", anaesthesia, ignore.case=T, perl=T), "Epidural",
+	ifelse(grepl(".*none*", anaesthesia, ignore.case=T, perl=T), "None", "Other"
+		))))) )],
+	by="pkey", all.x=TRUE)
+describe(wdt$anaesthetic.census)
 
 # Delivery route
 describe(tdt.census$delivery_route)

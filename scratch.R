@@ -1,0 +1,2 @@
+ls()
+str(tdt.census)
