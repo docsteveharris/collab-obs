@@ -14,6 +14,8 @@
 # ===
 # 2015-12-06
 # - file created by copying code from link_obs.r
+# 2016-01-18
+# - extracts surgical procedure
 
 rm(list=ls())
 PROJECT_PATH <- '/Users/steve/aor/academic/collab-obs-uclh/'
@@ -24,6 +26,7 @@ library(Hmisc)
 library(data.table)
 library(gmodels)
 library(stringr)
+library(lubridate)
 
 #  ==========================
 #  = Load theatre databases =
@@ -63,7 +66,8 @@ tdt.t1 <- rdt.t1[, .(
     surgical.time = difftime(
             as.POSIXct(Procedure_end_time, format="%d/%m/%Y %H:%M", tz="GMT"),
             as.POSIXct(Procedure_start_time, format="%d/%m/%Y %H:%M", tz="GMT"),
-            units="mins")
+            units="mins"),
+    surgical.proc = NA
     )
     ]
 # truncate anaesthesia delay at 2 hours
@@ -103,6 +107,7 @@ tdt.t2 <- rdt.t2[, .(
             as.POSIXct(cr_prdate,
             format="%d/%m/%y", tz="GMT")),
     theatre.hour = as.numeric(substr(time_anesthesia_start,1,2)),
+    # ncepod priority
     priority = 
         ifelse(grepl("elect.*", ncepod, ignore.case=T, perl=T), "elective",
         ifelse(grepl("schedul*", ncepod, ignore.case=T, perl=T), "scheduled",
@@ -115,7 +120,8 @@ tdt.t2 <- rdt.t2[, .(
     surgical.time = difftime(
         parse_date_time(time_actual_procedure_end, "HM"),
         parse_date_time(time_actual_procedure_start, "HM"),
-        units="mins") 
+        units="mins"),
+    surgical.proc = PrimSurgProc1
     ) ]
 # where crosses midnight then add 60*24 back
 tdt.t2[, anaesthesia.time:=ifelse(anaesthesia.time<0,anaesthesia.time+60*24,anaesthesia.time)]
@@ -143,9 +149,20 @@ tdt.t[, id.t := .I]
 str(tdt.t)
 names(tdt.t)
 setcolorder(tdt.t, 
-    c("id.t", "id.t1", "id.t2", names(tdt.t)[c(-1,-10,-11)]))
+    c("id.t", "id.t1", "id.t2", names(tdt.t)[c(-1,-11,-12)]))
 
 
 setnames(tdt.t,'MRN','mrn')
+
+# Inspect data
+str(tdt.t)
+t <- data.table(table(tdt.t$surgical.proc))
+setorder(t, -N)
+head(t,20)
+tdt.t[, lscs.theatre := ifelse(is.na(surgical.proc), NA, grepl(".*caesar*", surgical.proc, ignore.case=T, perl=T))]
+str(tdt.t)
+require(mosaic)
+tally(tdt.t$lscs.theatre)
+
 save(tdt.t, file='../data/theatre.RData')
 write.csv(tdt.t, "../data/wdt.theatre.csv" )
