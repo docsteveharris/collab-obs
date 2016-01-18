@@ -54,8 +54,11 @@ names(rdt.a)
 rdt.a[1:20,c(1:11,12), with=F]
 rdt.a1 <- rdt.a[,c(1:11,12), with=F] # primary anaes
 # flag where a secondary procedure occurs
+names(rdt.a)
+table(rdt.a$secondary.procedure)
 rdt.a1[,procedure := 1]
-rdt.a1[,secondary := ifelse(secondary.procedure=="" | secondary.procedure=="N/A",F,T)]
+rdt.a1[,secondary := ifelse(
+        secondary.procedure=="" | secondary.procedure=="N/A",F,T)]
 table(rdt.a1$secondary.procedure)
 table(rdt.a1$secondary)
 rdt.a1[,secondary.procedure:=NULL]
@@ -152,6 +155,9 @@ require(lubridate)
 tdt.a[as.POSIXct(anaesthetic.date) < ymd("2009-01-01"), anaesthetic.date:=NA]
 tdt.a[as.POSIXct(anaesthetic.date) >= ymd("2015-07-01"), anaesthetic.date:=NA]
 
+str(rdt.a)
+str(tdt.a)
+table(tdt.a$procedure)
 str(rdt.a1)
 str(rdt.a2)
 

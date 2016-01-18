@@ -159,10 +159,15 @@ str(tdt.t)
 t <- data.table(table(tdt.t$surgical.proc))
 setorder(t, -N)
 head(t,20)
+# Label up procedures that are sections
 tdt.t[, lscs.theatre := ifelse(is.na(surgical.proc), NA, grepl(".*caesar*", surgical.proc, ignore.case=T, perl=T))]
 str(tdt.t)
 require(mosaic)
 tally(tdt.t$lscs.theatre)
+
+require(lubridate)
+table(year(tdt.t1$theatre.date))
+table(year(tdt.t2$theatre.date))
 
 save(tdt.t, file='../data/theatre.RData')
 write.csv(tdt.t, "../data/wdt.theatre.csv" )

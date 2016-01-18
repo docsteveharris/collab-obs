@@ -249,6 +249,7 @@ save(wdt.final, file="../data/working_final.RData")
 load('../data/anaesthesia.RData')
 str(tdt.a)
 describe(tdt.a$labour.epidural)
+with(tdt.a, table(procedure, labour.epidural))
 tdt.labepi <- tdt.a[labour.epidural==1 & secondary == FALSE]
 str(tdt.labepi)
 
@@ -465,8 +466,12 @@ table(tdt.a[is.na(category) & csection==1]$indication)
 describe(tdt.a$csection)
 describe(tdt.a$category)
 
-tdt.lscs <- tdt.a[csection==1 & secondary == FALSE]
+# - [ ] NOTE(2016-01-18): Should not be excluding secondary
+# but only 152 secondary procedures are c-sections
+with(tdt.a, table(procedure, csection))
+tdt.lscs <- tdt.a[csection==1]
 str(tdt.lscs)
+# table(tdt.a[csection==1]$secondary)
 
 
 # Merge 1 - using MRN and maternal request and then dropping if date is
@@ -704,13 +709,11 @@ describe(wdt$labour.type)
 
 # lscs
 # lscs.cat
-wdt <- merge(wdt, tdt.census[,.(pkey, lscs, lscs.cat)],
+wdt <- merge(wdt, tdt.census[,.(pkey, lscs.census=lscs, lscs.census.cat=lscs.cat)],
 	by="pkey", all.x=TRUE)
-describe(wdt$lscs)
-describe(wdt$lscs.cat)
+describe(wdt$lscs.census)
+describe(wdt$lscs.census.cat)
 
-with(wdt, table(lscs, lscs.a, useNA="ifany"))
-with(wdt, table(lscs.cat, lscs.a.cat, useNA="ifany"))
 
 # birth_place - already imported
 setnames(wdt, "birth_place", "birth.place")
@@ -803,8 +806,9 @@ wdt[, dob.hr := hour(dtob)]
 names(tdt.census)
 str(wdt)
 
-
-
+# Merge theatre procedure and section data where available
+wdt <- merge(wdt, tdt.t[,.(id.t, surgical.proc, lscs.theatre)],
+	by.x="id.theatre", by.y="id.t", all.x=TRUE)
 
 #  ================
 #  = Final export =
